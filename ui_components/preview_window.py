@@ -1,11 +1,13 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import cv2
 import threading
 import time
 import os
 from PIL import Image, ImageTk
 from utils.utils import VideoUtils
+import csv
+import asyncio
 
 
 class PreviewWindow:
@@ -16,6 +18,11 @@ class PreviewWindow:
         self.start_time = start_time
         self.end_time = end_time
         self.auto_play = auto_play  # 자동 재생여부
+        # 성능 최적화 관련 속성성
+        self.target_fps = 30
+        self.frame_skip = 1
+        self.frame_count = 0
+        self.memory_cleanup_counter = 0
 
         # 새 창 생성
         self.window = tk.Toplevel(root)
@@ -40,12 +47,26 @@ class PreviewWindow:
         # 초기 프레임 표시 추가!
         self.show_frame_at_time(self.start_time)
 
+        # 비디오 속성 최적화
+        if self.cap and self.cap.isOpend():
+            self.original_fps = self.cap.get(cv2.CAP_PROP_FPS)
+            self.target_fps = VideoUtils.calculate_optimal_fps(
+                self.original_fps)
+            self.frame_skip = VideoUtils.calculate_frame_skip(
+                self.original_fps, self.target_fps)
+
         # 자동 재생 시작
         if self.auto_play:
             self.window.after(500, self.start_auto_play)  # 500ms 이후 자동 재생생
 
         # 창닫기 이벤트 바인딩
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        # # asyncio 이벤트 루프 관리
+        # self.loop = asyncio.new_event_loop()
+        # self.loop_thread = threading.Thread(
+        #     target=self.run_async_loop, daemon=True)
+        # self.loop_thread.start()
 
     def create_ui(self):
         """UI 구성 요소 생성"""
@@ -127,6 +148,77 @@ class PreviewWindow:
                               fg='gray')
         help_label.pack(side=tk.RIGHT, padx=10)
 
+    def show_frame_at_time(self, time_sec):
+        """"""
+        try:
+            ret, frame = VideoUtils.read_frame_at_position(
+                self.cap, time_sec, self.fps
+            )
+
+            if ret:
+                # 최적화 메서드 사용
+                self.show_frame_optimized(frame)
+                self.current_time = time_sec
+                self.update_position_label()
+
+            else:
+                print(f"Failed to read frame at {time_sec}s")
+
+        except Exception as e:
+            print(f"Error showing frame at time {time_sec}: {e}")
+
+    def update_frames_optimized(self):
+        if not self.is_playing:
+            return
+
+        # 프레임 스킵 로직
+        self.frame_count += 1
+        if self.frame_count % self.frame_skip != 0
+        frame_interval = int(1000/self.target_fps)
+        self.root.after(frame_interval, self.update_frames_optimized)
+        return
+
+        # 현재시간 확인
+        if self.current_time >= self.end_time:
+            if self.loop_play:  # 루프 재생: 시작점으로 이동
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES,
+                             int(self.start_time * self.fps))
+                self.current_time = self.start_time
+            else:
+                # 루프 비활성화 - 재생 중지
+                self.is_playing = False
+                self.play_button.config(text="▶")
+                return
+
+        ret, frame = self.cap.read()
+        if ret:
+            self.show_frame_optimized(frame)
+
+            self.current_time = self.cap.get(
+                cv2.CAP_PROP_POS_FRAMES) / self.fps
+            self.update_position_label()
+
+        # 주기적 메모리 정리
+        self.memory_cleanup_counter += 1
+        if self.memory_cleanup_counter % 100 == 0:
+            self.cleanup_memory()
+
+        # 다음 프레임 스케줄링
+
+    def update_position_label(self):  # 2번
+        """위치 레이블 업데이트"""
+        current_str = VideoUtils.format_time(self.current_time)
+        end_str = VideoUtils.format_time(self.end_time)
+        self.position_label.config(text=f"{current_str} / {end_str}")
+
+    def cleanup_memory(self):  # 2번
+        """주기적 메모리 정리"""
+        import gc
+        # 가비지 컬렉션 실행
+        gc.collect()
+        # OpenCV 메모리 정리
+        VideoUtils.cleanup_opencv_memory()
+
     def toggle_play(self):
         """재생/일시정지 토글"""
         if self.is_playing:
@@ -141,12 +233,20 @@ class PreviewWindow:
                 return
             # 새 재생 스레드 시작
             self.update_thread = threading.Thread(
-                target=self.update_frames, daemon=True)
+                target=self.update_frames_optimized, daemon=True)
             self.update_thread.start()
 
     def toggle_loop(self):
         """루프 재생 설정 변경"""
         self.loop_play = self.loop_var.get()
+
+    def run_async_loop(self):
+        """
+        별도의 스레드에서 asyncio 이벤트 루프 실행.
+        :return:
+        """
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
 
     def save_selection(self):
         """현재 선택 구간 저장"""
@@ -197,6 +297,7 @@ class PreviewWindow:
                                   columns=("파일명", "시작시간", "종료시간",
                                            "길이", "의견1", "의견2"),
                                   show='headings',
+                                  selectmode='browse'  # ✅ 단일 선택만 허용
                                   yscrollcommand=table_scroll.set)
         self.table.pack(fill=tk.BOTH, expand=True)
 
@@ -247,15 +348,26 @@ class PreviewWindow:
 
     def on_item_doubleclick(self, event):
         "더블 클릭시, 편집 시작"
+        # 선택된 항목 확인
         selected_items = self.table.selection()
+        # 선택된 항목이 없는 경우 처리
         if not selected_items:
             messagebox.showwarning("경고", "편집할 항목을 선택해주세요.")
             return
+
+        # 첫 번째 선택된 항목 가져오기
         item = selected_items[0]
+        # 클릭된 컬럼 식별
         column = self.table.identify_column(event.x)  # x 좌표에서 컬럼 찾기
         # 예시 row = self.table.identify_column(event.y) # y 좌표에서 행 찾기
 
-        if column in ('의견1', '의견2'):  # 의견 컬럼들만 수정하게게
+        # ✅ 디버깅을 위한 출력 추가
+        # 디버깅을 위한 출력
+        print(f"선택된 항목: {item}")
+        print(f"클릭된 컬럼: {column}")
+        print(f"항목 데이터: {self.table.item(item, 'values')}")
+
+        if column in ('의견1', '의견2'):  # 의견 컬럼들만 수정하게
             self.start_edit(item, column)
 
     def start_edit(self, item, column):
@@ -274,7 +386,7 @@ class PreviewWindow:
         # 엔트리 위젯 위치
         x, y, width, height = self.table.bbox(item, column)
 
-        # 글자수 제한
+        # 글자수 제한 (30자까지지)
         wordlimit_cmd = (self.table.register(
             self.validate_input), '%P')  # %P는 매개변수
         self.entry_edit.config(validate='key', validatecommand=wordlimit_cmd)
@@ -284,6 +396,10 @@ class PreviewWindow:
         self.entry_edit.insert(0, current_value)
         self.entry_edit.focus()
         self.entry_edit.select_range(0, tk.END)
+
+    def validate_input(self, value):
+        "입력 검증: 글자수 제한"
+        return len(value) <= 30
 
     def save_edit(self):
         "편집 내용 저장"
@@ -325,23 +441,36 @@ class PreviewWindow:
                 end_str = VideoUtils.format_time(segment['end'])
                 duration_str = VideoUtils.format_time(segment['duration'])
 
+                # 의견 데이터 가져오기 (없으면, 빈 문자열)
+                opinion1 = segment.get('opinion1', '')
+                opinion2 = segment.get('opinion2', '')
+
                 self.table.insert("", "end", values=(
                     segment.get('file', ''),  # 파일명 포함
                     start_str,
                     end_str,
-                    duration_str))
+                    duration_str,
+                    opinion1,
+                    opinion2))
 
     def delete_selected_segment(self):
         """선택된 구간 삭제"""
-        selected_item = self.table.selection()
-        if not selected_item:
+        selected_items = self.table.selection()
+        if not selected_items:
             messagebox.showwarning("경고", "삭제할 항목을 선택해주세요.")
             return
+
+        # ✅ 여러 항목이 선택된 경우를 고려하거나, 혹은 1개만 선택하면 나머지 비활성화.
+        # if len(selected_items) > 1:
+            # if not messagebox.askyesno("확인", f"{len(selected_items)}개 항목을 삭제하시겠습니까?"):
+            # return
+        # for item in reversed(selected_items): 마지막부터 삭제 (인덱스 변경 방지)
+            # index = self.table.index(item)
 
         # 확인 대화상자
         if messagebox.askyesno("확인", "선택한 구간을 삭제하시겠습니까?"):
             # 선택된 항목의 인덱스 찾기
-            index = self.table.index(selected_item[0])
+            index = self.table.index(selected_items[0])  # 첫번째 선택된 항목목
 
             # 메인 앱의 리스트에서 삭제
             if hasattr(self.app, 'saved_segments') and index < len(self.app.saved_segments):
@@ -356,3 +485,28 @@ class PreviewWindow:
         if self.cap:
             self.cap.release()
         self.window.destroy()
+
+    def export_to_csv(self):
+        "데이터 csv 파일로 내보내기"
+        file_path = filedialog.asksaveasfilename(defaultextension=".csv",
+                                                 filetypes=[
+                                                     "CSV files", "*.csv"],
+                                                 title="구간데이터_저장")
+
+        if file_path and hasattr(self.app, 'saved_segments'):
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(
+                    ['파일명', '시작 시간', '종료 시간', '구간 길이', '의견1', '의견2'])
+
+                for segment in self.app.saved_segments:
+                    writer.writerow([
+                        segment.get('file', ''),
+                        VideoUtils.format_time(segment['start']),
+                        VideoUtils.format_time(segment['end_time']),
+                        VideoUtils.format_time(segment['duration']),
+                        segment.get('opinion1', ''),
+                        segment.get('opinion2', '')
+                    ])
+
+            messagebox.showinfo("성공", f"데이터가 {file_path}에 저장되었습니다.")
