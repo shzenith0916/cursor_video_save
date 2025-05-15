@@ -84,3 +84,78 @@ class VideoUtils:
 
         # 프레임 읽기
         return cap.read()
+
+    @staticmethod
+    def convert_frame_to_photo_optimized(frame, target_width=None, target_height=None):
+        """최적화된 OpenCV 프레임을 Tkinter PhotoImage로 변환"""
+        try:
+            # BGR -> RGB 변환
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # PIL 이미지 생성
+            pil_img = Image.fromarray(frame_rgb)
+            return ImageTk.PhotoImage(pil_img)
+
+        except Exception as e:
+            print(f"Frame Conversion Error: {e}")
+            return None
+
+    @staticmethod
+    def calculate_optimal_fps(original_fps, max_fps=30):
+        """최적 fps 계산"""
+        return min(original_fps, max_fps)
+
+    @staticmethod
+    def calculate_frame_skip(original_fps, target_fps):
+        """프레임 스킵 계산하기"""
+        if target_fps >= original_fps:
+            return 1
+        return max(1, round(original_fps / target_fps))
+
+    @staticmethod
+    def cleanup_opencv_memory():
+        """메모리 정리"""
+        cv2.destroyAllWindows()
+
+    @staticmethod
+    def validate_video_section(cap, start_time, end_time):
+        """비디오 구간 유효성 검사"""
+        if not cap or not cap.isOpened():
+            return False, "비디오를 열 수 없습니다."
+
+        props = VideoUtils.get_video_properties(cap)
+        if not props:
+            return False, "비디오 속성을 가져올 수 없습니다."
+
+        if start_time < 0:
+            return False, "시작 시간은 0 초 보다 작을 수 없습니다."
+
+        if start_time >= end_time:
+            return False, "시작 시간은 종료 시간보다 빨라야 합니다."
+
+        return True, "유효한 구간입니다."
+
+    @staticmethod
+    def initialize_video(video_path):
+        """비디오 초기화 및 설정
+
+        Args:
+            video_path (str): 비디오 파일 경로
+
+        Returns:
+            tuple: (VideoCapture 객체, fps) 또는 실패시 (None, None)
+        """
+        try:
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                raise Exception("비디오 파일을 열 수 없습니다.")
+
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            if fps <= 0:
+                raise Exception("비디오 FPS를 읽을 수 없습니다.")
+
+            return cap, fps
+
+        except Exception as e:
+            print(f"비디오 초기화 실패: {str(e)}")
+            return None, None

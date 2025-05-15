@@ -247,37 +247,46 @@ class VideoEditorApp:
 
     def preview_selection(self):
         '''선택구간 미리보기" 버튼을 눌렀을 때 호출되는 함수 (UI 이벤트 핸들러)'''
+
+        # 비디오 로드 여부 확인
         if not self.cap or self.video_path == "":
             tk.messagebox.showwarning("경고", "비디오를 먼저 로드해주세요.")
             return
 
+        # 구간이 있는지 그리고 구간 유효성 검사사
         if self.start_time >= self.end_time:
             tk.messagebox.showwarning("경고", "시작 시간이 종료 시간보다 크거나 같습니다.")
             return
 
-        # 새 미리보기 창 생성
-        preview_window = PreviewWindow(
-            self.root,
-            self,  # 앱 자체를 참조로 전달
-            self.video_path,
-            self.start_time,
-            self.end_time
-        )
+        # 이미 열린 미리보기 창이 있다면 닫기
+        if hasattr(self, 'preview_window') and self.preview_window is not None:
+            try:
+                self.preview_window.window.destroy()
+            except:
+                pass
 
-    def preview_selection(self):
-
-        if not self.cap or self.video_path is None:
+        # 새 미리보기 창 생성 및 인스턴스 유지
+        try:
+            self.preview_window = PreviewWindow(
+                self.root,  # 메인 윈도우(root) 를 부모로 전달
+                self,  # App instance를 참조로 전달
+                self.video_path,
+                self.start_time,
+                self.end_time
+            )
+        except Exception as e:
+            print(f"미리보기 창 생성 오류: {str(e)}")
             return
 
-        # 현재 재생중이면 중지
-        self.is_previewing = False
-        self.play_button.config(text="재생")
+        # 미리보기 창이 닫힐 때 참조 제거
+        self.preview_window.window.protocol("WM_DELETE_WINDOW",
+                                            lambda: self._on_preview_window_close())
 
-        # 미리보기 시작
-        self.is_previewing = True
-        self.play_button.config(text="일시정지")
-        # 미리보기 스레드 시작
-        threading.Thread(target=self.play_selection, daemon=True).start()
+    def _on_preview_window_close(self):
+        """미리보기 창이 닫힐 때 호출되는 콜백"""
+        if hasattr(self, 'preview_window') and self.preview_window is not None:
+            self.preview_window.on_close()
+            self.preview_window = None
 
     def play_selection(self):
         """선택 구간만 재생"""

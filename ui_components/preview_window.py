@@ -42,13 +42,17 @@ class PreviewWindow:
         self.loop_play = True  # 동영상 루프로 재생 여부
 
         # 비디오 초기화
-        self.initialize_video()
+        self.cap, self.fps = VideoUtils.initialize_video(video_path)
+        if self.cap is None:
+            messagebox.showerror("오류", "비디오 초기화에 실패했습니다.")
+            self.window.destroy()
+            return
 
         # 초기 프레임 표시 추가!
         self.show_frame_at_time(self.start_time)
 
         # 비디오 속성 최적화
-        if self.cap and self.cap.isOpend():
+        if self.cap and self.cap.isOpened():
             self.original_fps = self.cap.get(cv2.CAP_PROP_FPS)
             self.target_fps = VideoUtils.calculate_optimal_fps(
                 self.original_fps)
@@ -70,7 +74,6 @@ class PreviewWindow:
 
     def create_ui(self):
         """UI 구성 요소 생성"""
-
         # 메인 프레임
         self.main_frame = tk.Frame(self.window)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
@@ -82,14 +85,20 @@ class PreviewWindow:
 
         # VideoUtils 사용하여 비디오레이블 생성
         self.video_label = VideoUtils.create_video_label(self.video_frame)
+        self.video_label.pack(expand=True, fill="both")
         self.video_label.config(bg="black")
 
         # 우측 프레임 (구간 정보 테이블)
         self.right_frame = tk.Frame(self.main_frame)
-        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH,
-                              padx=(5, 0), width=300)
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(5, 0))
 
-        # 테이블 생성
+        # 우측 프레임의 크기를 고정하기 위해 프레임 내부에 고정 크기의 컨테이너 추가
+        self.right_container = tk.Frame(
+            self.right_frame, width=400)  # 너비를 400으로 증가
+        self.right_container.pack(fill=tk.BOTH, expand=True)
+        self.right_container.pack_propagate(False)  # 컨테이너 크기 고정
+
+        # 테이블 생성 (right_container 안에 생성)
         self.create_table()
 
         # 컨트롤 플레임
@@ -149,7 +158,7 @@ class PreviewWindow:
         help_label.pack(side=tk.RIGHT, padx=10)
 
     def show_frame_at_time(self, time_sec):
-        """"""
+        """지정된 시간의 프레임 표시 (최적화)"""
         try:
             ret, frame = VideoUtils.read_frame_at_position(
                 self.cap, time_sec, self.fps
@@ -167,16 +176,21 @@ class PreviewWindow:
         except Exception as e:
             print(f"Error showing frame at time {time_sec}: {e}")
 
+    def show_frame_optimized(self, frame):
+        """프레임 표시 (최적화)"""
+        try:
+            # VideoUtils의 최적화된 변환 메서드 사용
+            photo = VideoUtils.convert_frame_to_photo_optimized(frame)
+            if photo:
+                self.video_label.config(image=photo)
+                self.video_label.image = photo  # 참조 유지
+        except Exception as e:
+            print(f"Error in show_frame_optimized: {e}")
+
     def update_frames_optimized(self):
+        """프레임 업데이트 (최적화)"""
         if not self.is_playing:
             return
-
-        # 프레임 스킵 로직
-        self.frame_count += 1
-        if self.frame_count % self.frame_skip != 0
-        frame_interval = int(1000/self.target_fps)
-        self.root.after(frame_interval, self.update_frames_optimized)
-        return
 
         # 현재시간 확인
         if self.current_time >= self.end_time:
@@ -193,17 +207,18 @@ class PreviewWindow:
         ret, frame = self.cap.read()
         if ret:
             self.show_frame_optimized(frame)
-
             self.current_time = self.cap.get(
                 cv2.CAP_PROP_POS_FRAMES) / self.fps
             self.update_position_label()
 
-        # 주기적 메모리 정리
-        self.memory_cleanup_counter += 1
-        if self.memory_cleanup_counter % 100 == 0:
-            self.cleanup_memory()
+            # 주기적 메모리 정리
+            self.memory_cleanup_counter += 1
+            if self.memory_cleanup_counter % 100 == 0:
+                self.cleanup_memory()
 
-        # 다음 프레임 스케줄링
+            # 다음 프레임 스케줄링 (window.after 사용)
+            frame_interval = int(1000/self.target_fps)
+            self.window.after(frame_interval, self.update_frames_optimized)
 
     def update_position_label(self):  # 2번
         """위치 레이블 업데이트"""
@@ -227,14 +242,8 @@ class PreviewWindow:
         else:
             self.is_playing = True
             self.play_button.config(text="⏸")
-
-            # 이미 재생중이면, 중지
-            if self.update_thread and self.update_thread.is_alive():
-                return
-            # 새 재생 스레드 시작
-            self.update_thread = threading.Thread(
-                target=self.update_frames_optimized, daemon=True)
-            self.update_thread.start()
+            # after 메서드를 사용하여 프레임 업데이트 시작
+            self.update_frames_optimized()
 
     def toggle_loop(self):
         """루프 재생 설정 변경"""
@@ -262,7 +271,7 @@ class PreviewWindow:
             'duration': self.end_time - self.start_time
         }
 
-        # ✅ 중복 체크 (선택 사항)
+        # 중복 체크
         for segment in self.app.saved_segments:
             if (abs(segment['start'] - self.start_time) < 0.1) and (abs(segment['end'] - self.end_time) < 0.1):
                 messagebox.showinfo("💡알림", "이미 동일한 구간이 저장되어 있습니다.")
@@ -279,16 +288,16 @@ class PreviewWindow:
     def create_table(self):
         "테이블 생성"
         # 테이블 위에 표시할 텍스트
-        table_label = tk.Label(self.right_frame,
+        table_label = tk.Label(self.right_container,
                                text="저장된 구간 목록",
                                font=("Arial", 12, "bold"))
         table_label.pack(pady=(10, 10))
 
-        # 테이블 프레임 생성 (지역변수 local variable)
-        table_frame = tk.Frame(self.right_frame)
+        # 테이블 프레임 생성
+        table_frame = tk.Frame(self.right_container)
         table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # 테이블 프레임 내 스크롤바 (저장 구간이 많을 경우를 대비해서)
+        # 테이블 프레임 내 스크롤바
         table_scroll = ttk.Scrollbar(table_frame)
         table_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -297,54 +306,52 @@ class PreviewWindow:
                                   columns=("파일명", "시작시간", "종료시간",
                                            "길이", "의견1", "의견2"),
                                   show='headings',
-                                  selectmode='browse'  # ✅ 단일 선택만 허용
+                                  selectmode='browse',
                                   yscrollcommand=table_scroll.set)
         self.table.pack(fill=tk.BOTH, expand=True)
 
         # ✅ 스크롤바와 Treeview 연결
         table_scroll.config(command=self.table.yview)
 
-        # 컬럼 헤더 설정
-        self.table.heading("파일명", text="파일명", anchor=tk.W)
-        self.table.heading("시작시간", text="시작 시간")
-        self.table.heading("종료시간", text="종료 시간")
-        self.table.heading("길이", text="구간 길이")
-        self.table.heading("의견1", text="의견1")
-        self.table.heading("의견2", text="의견2")
+        # 컬럼 설정
+        columns = {
+            "파일명": (150, tk.W),      # 파일명은 왼쪽 정렬
+            "시작시간": (80, tk.CENTER),
+            "종료시간": (80, tk.CENTER),
+            "길이": (60, tk.CENTER),
+            "의견1": (100, tk.CENTER),
+            "의견2": (100, tk.CENTER)
+        }
 
-        # 컬럼 너비 설정
-        self.table.column("파일명", width=120)
-        self.table.column("시작시간", width=100)
-        self.table.column("종료시간", width=100)
-        self.table.column("길이", width=80)
-        self.table.column("의견1", width=100)
-        self.table.column("의견2", width=100)
+        # 컬럼 설정 적용
+        for col, (width, anchor) in columns.items():
+            self.table.heading(col, text=col, anchor=anchor)
+            self.table.column(col, width=width, minwidth=width,
+                              stretch=True)  # stretch=True로 변경
 
-        # 테이블에 행으로 들어갈 데이터 예시. 원래 코드로 추가시 예시.
-        # table.insert("", tk.END, text="1", values=("#0", "임aa(1)SF.avi", "00:00", "00:03", "3초", "정상", "잔여물 x"))#
+        # 테이블 크기 조정 이벤트 바인딩
+        self.right_container.bind('<Configure>', self._on_container_resize)
 
-        # 더블클릭으로 편집 가능하도록 이벤트 바인딩
-        self.table.bind("<DoubleClick>", self.on_item_doubleclick)
+    def _on_container_resize(self, event):
+        """컨테이너 크기 변경 시 테이블 컬럼 너비 조정"""
+        if event.width > 0:  # 유효한 너비인 경우에만 처리
+            # 전체 너비에서 스크롤바 너비(20px)를 제외한 사용 가능한 너비 계산
+            available_width = event.width - 20
 
-        # 편집을 위한 엔트리 생성
-        self.entry_edit = tk.Entry(self.table)
-        self.entry_edit.bind("<Return>", self.save_edit)
-        self.entry_edit.bind("<FocusOut>", self.save_edit)
-        self.entry_edit.bind("<Escape>", self.cancel_edit)
+            # 컬럼 너비 비율 설정 (전체 너비의 비율로)
+            width_ratios = {
+                "파일명": 0.35,    # 35%
+                "시작시간": 0.15,  # 15%
+                "종료시간": 0.15,  # 15%
+                "길이": 0.10,      # 10%
+                "의견1": 0.125,    # 12.5%
+                "의견2": 0.125     # 12.5%
+            }
 
-        # 편집 관련 변수
-        self.editing_item = None
-        self.editing_column = None
-
-        # 초기 데이터 로드
-        self.load_table_data()
-
-        # 삭제 버튼 생성
-        delete_button = tk.Button(self.right_frame,
-                                  text="구간 선택 삭제",
-                                  command=self.delete_selected_segment,
-                                  font=("Arial", 12))
-        delete_button.pack(pady=3)
+            # 각 컬럼의 너비 계산 및 적용
+            for col, ratio in width_ratios.items():
+                width = int(available_width * ratio)
+                self.table.column(col, width=width, minwidth=int(width * 0.8))
 
     def on_item_doubleclick(self, event):
         "더블 클릭시, 편집 시작"
@@ -510,3 +517,8 @@ class PreviewWindow:
                     ])
 
             messagebox.showinfo("성공", f"데이터가 {file_path}에 저장되었습니다.")
+
+    def start_auto_play(self):
+        """자동 재생 시작"""
+        if self.auto_play and not self.is_playing:
+            self.toggle_play()
