@@ -34,6 +34,9 @@ class VideoEditorApp:
         self.start_time = 0
         self.end_time = 0
 
+        # 저장된 구간 목록 초기화
+        self.saved_segments = []
+
         self.ui = create_tabs(self.root, self)
 
         print("App 초기화 완료")
@@ -232,18 +235,30 @@ class VideoEditorApp:
         if self.cap is None:
             return
 
-        value = float(value)
-        frame_num = int(value * self.fps)
+        try:
+            value = float(value)
+            frame_num = int(value * self.fps)
 
-        # 프레임 표시
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-        ret, frame = self.cap.read()
-        if ret:
-            self.show_frame(frame)
+            # 현재 슬라이더 값과 새로운 값이 같으면 업데이트하지 않음
+            current_slider_value = float(self.position_slider.get())
+            if abs(current_slider_value - value) < 0.001:  # 부동소수점 비교를 위한 작은 오차 허용
+                return
+
+            # 프레임 표시 (재생 중이든 아니든 항상 업데이트)
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = self.cap.read()
+            if ret:
+                self.show_frame(frame)
 
             # 현재 위치 시간 업데이트
-            current_time = VideoUtils.format_time(value)
+            current_time = VideoUtils.format_time(int(value))
             self.position_label.config(text=f"현재 위치: {current_time}")
+
+            # 슬라이더 위치 업데이트 (값이 실제로 변경된 경우에만)
+            if abs(current_slider_value - value) >= 0.001:
+                self.position_slider.set(value)
+        except ValueError:
+            pass  # 잘못된 값이 들어왔을 때 무시
 
     def preview_selection(self):
         '''선택구간 미리보기" 버튼을 눌렀을 때 호출되는 함수 (UI 이벤트 핸들러)'''

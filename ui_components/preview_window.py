@@ -76,12 +76,11 @@ class PreviewWindow:
         """UI 구성 요소 생성"""
         # 메인 프레임
         self.main_frame = tk.Frame(self.window)
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # 좌측 프레임 (비디오 재생)
-        self.video_frame = tk.Frame(self.main_frame, bg="black")
-        self.video_frame.pack(side="left", fill=tk.BOTH,
-                              expand=True, padx=(0, 10))
+        self.video_frame = tk.Frame(self.main_frame, bg="black", width=600)
+        self.video_frame.pack(side="left", fill=tk.BOTH, expand=False)
+        self.video_frame.pack_propagate(False)  # 크기 고정
 
         # VideoUtils 사용하여 비디오레이블 생성
         self.video_label = VideoUtils.create_video_label(self.video_frame)
@@ -89,21 +88,20 @@ class PreviewWindow:
         self.video_label.config(bg="black")
 
         # 우측 프레임 (구간 정보 테이블)
-        self.right_frame = tk.Frame(self.main_frame)
-        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(5, 0))
+        self.right_frame = tk.Frame(self.main_frame, width=400)
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(10, 0))
+        self.right_frame.pack_propagate(False)  # 최소 너비 유지
 
         # 우측 프레임의 크기를 고정하기 위해 프레임 내부에 고정 크기의 컨테이너 추가
-        self.right_container = tk.Frame(
-            self.right_frame, width=400)  # 너비를 400으로 증가
-        self.right_container.pack(fill=tk.BOTH, expand=True)
-        self.right_container.pack_propagate(False)  # 컨테이너 크기 고정
+        self.right_container = tk.Frame(self.right_frame)
+        self.right_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # 테이블 생성 (right_container 안에 생성)
         self.create_table()
 
         # 컨트롤 플레임
         self.control_frame = tk.Frame(self.window)
-        self.control_frame.pack(fill=tk.X, padx=10, pady=10)
+        self.control_frame.pack(fill=tk.X, padx=10, pady=5)
 
         # 재생/일시정지 버튼
         self.play_button = tk.Button(
@@ -139,7 +137,6 @@ class PreviewWindow:
             text=self.segment_info,
             font=("Arial", 11),
             fg='blue')
-
         self.segment_label.pack(side=tk.RIGHT, padx=5)
 
         # 위치 레이블
@@ -156,6 +153,18 @@ class PreviewWindow:
                               font=("Arial", 11),
                               fg='gray')
         help_label.pack(side=tk.RIGHT, padx=10)
+
+        # 창 크기 변경 이벤트 바인딩
+        self.window.bind('<Configure>', self._on_window_resize)
+
+    def _on_window_resize(self, event):
+        """창 크기 변경 시 비디오 프레임 크기 조정"""
+        if event.widget == self.window:  # 메인 창의 크기 변경일 때만 처리
+            # 우측 프레임의 너비를 고정하고 남은 공간을 비디오 프레임에 할당
+            # 전체 너비에서 우측 프레임(400)과 여백(20) 제외
+            available_width = event.width - 420
+            if available_width > 0:
+                self.video_frame.configure(width=available_width)
 
     def show_frame_at_time(self, time_sec):
         """지정된 시간의 프레임 표시 (최적화)"""
@@ -240,6 +249,13 @@ class PreviewWindow:
             self.is_playing = False
             self.play_button.config(text="▶")
         else:
+            # 재생 시작 시 현재 위치가 종료 시간이면 시작 시간으로 이동
+            if self.current_time >= self.end_time:
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES,
+                             int(self.start_time * self.fps))
+                self.current_time = self.start_time
+                self.show_frame_at_time(self.start_time)
+
             self.is_playing = True
             self.play_button.config(text="⏸")
             # after 메서드를 사용하여 프레임 업데이트 시작
@@ -268,13 +284,15 @@ class PreviewWindow:
             'file': os.path.basename(self.video_path),
             'start': self.start_time,
             'end': self.end_time,
-            'duration': self.end_time - self.start_time
+            'duration': self.end_time - self.start_time,
+            'type': os.path.splitext(os.path.basename(self.video_path))[0][-2:]
         }
 
         # 중복 체크
         for segment in self.app.saved_segments:
             if (abs(segment['start'] - self.start_time) < 0.1) and (abs(segment['end'] - self.end_time) < 0.1):
                 messagebox.showinfo("💡알림", "이미 동일한 구간이 저장되어 있습니다.")
+                self.window.focus_force()  # 미리보기 창으로 포커스 강제 이동
                 return
 
         self.app.saved_segments.append(new_segment)
@@ -282,8 +300,9 @@ class PreviewWindow:
         # 테이블 갱신
         self.load_table_data()
 
-        # 메시지 표시
-        tk.messagebox.showinfo("💡알림", "구간이 저장되었습니다.")
+        # 메시지 표시 후 미리보기 창으로 포커스 이동
+        messagebox.showinfo("💡알림", "구간이 저장되었습니다.")
+        self.window.focus_force()  # 미리보기 창으로 포커스 강제 이동
 
     def create_table(self):
         "테이블 생성"
@@ -291,11 +310,11 @@ class PreviewWindow:
         table_label = tk.Label(self.right_container,
                                text="저장된 구간 목록",
                                font=("Arial", 12, "bold"))
-        table_label.pack(pady=(10, 10))
+        table_label.pack(pady=(10, 5))
 
         # 테이블 프레임 생성
         table_frame = tk.Frame(self.right_container)
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # 테이블 프레임 내 스크롤바
         table_scroll = ttk.Scrollbar(table_frame)
@@ -304,10 +323,11 @@ class PreviewWindow:
         # 테이블 프레임 안 트리뷰로 테이블 생성 (인스턴스 변수 Instance Variable)
         self.table = ttk.Treeview(table_frame,
                                   columns=("파일명", "시작시간", "종료시간",
-                                           "길이", "의견1", "의견2"),
+                                           "길이", "TYPE", "PAS", "잔여물"),
                                   show='headings',
                                   selectmode='browse',
-                                  yscrollcommand=table_scroll.set)
+                                  yscrollcommand=table_scroll.set,
+                                  height=10)  # 테이블 높이 설정
         self.table.pack(fill=tk.BOTH, expand=True)
 
         # ✅ 스크롤바와 Treeview 연결
@@ -319,8 +339,9 @@ class PreviewWindow:
             "시작시간": (80, tk.CENTER),
             "종료시간": (80, tk.CENTER),
             "길이": (60, tk.CENTER),
-            "의견1": (100, tk.CENTER),
-            "의견2": (100, tk.CENTER)
+            "TYPE": (80, tk.CENTER),    # TYPE 컬럼 설정 추가
+            "PAS": (100, tk.CENTER),
+            "잔여물": (100, tk.CENTER)
         }
 
         # 컬럼 설정 적용
@@ -332,6 +353,31 @@ class PreviewWindow:
         # 테이블 크기 조정 이벤트 바인딩
         self.right_container.bind('<Configure>', self._on_container_resize)
 
+        # 편집을 위한 엔트리 위젯 생성 (실제로는 start_edit에서 생성)
+        self.entry_edit = None
+
+        # 더블클릭 이벤트 바인딩 (올바른 이벤트 이름으로 수정)
+        self.table.bind('<Double-1>', self.on_item_doubleclick)
+
+        # 초기 데이터 로드
+        self.load_table_data()
+
+        # 버튼 프레임 생성
+        button_frame = tk.Frame(self.right_container)
+        button_frame.pack(fill=tk.X, pady=5)
+
+        # 삭제 버튼 추가
+        delete_button = tk.Button(button_frame,
+                                  text="선택 구간 삭제",
+                                  command=self.delete_selected_segment)
+        delete_button.pack(side=tk.LEFT, padx=5)
+
+        # CSV 내보내기 버튼 추가
+        export_button = tk.Button(button_frame,
+                                  text="CSV로 내보내기",
+                                  command=self.export_to_csv)
+        export_button.pack(side=tk.LEFT, padx=5)
+
     def _on_container_resize(self, event):
         """컨테이너 크기 변경 시 테이블 컬럼 너비 조정"""
         if event.width > 0:  # 유효한 너비인 경우에만 처리
@@ -340,12 +386,13 @@ class PreviewWindow:
 
             # 컬럼 너비 비율 설정 (전체 너비의 비율로)
             width_ratios = {
-                "파일명": 0.35,    # 35%
-                "시작시간": 0.15,  # 15%
-                "종료시간": 0.15,  # 15%
-                "길이": 0.10,      # 10%
-                "의견1": 0.125,    # 12.5%
-                "의견2": 0.125     # 12.5%
+                "파일명": 0.30,    # 30%
+                "시작시간": 0.12,  # 12%
+                "종료시간": 0.12,  # 12%
+                "길이": 0.08,      # 8%
+                "TYPE": 0.10,      # 10% (TYPE 컬럼 비율 추가)
+                "PAS": 0.14,       # 14%
+                "잔여물": 0.14     # 14%
             }
 
             # 각 컬럼의 너비 계산 및 적용
@@ -354,27 +401,29 @@ class PreviewWindow:
                 self.table.column(col, width=width, minwidth=int(width * 0.8))
 
     def on_item_doubleclick(self, event):
-        "더블 클릭시, 편집 시작"
-        # 선택된 항목 확인
+        """더블 클릭시, 편집 시작. 
+        선택된 항목 확인. 클릭된 컬럼 식별. 
+        컬럼 이름 가져오기. 의견 컬럼인 경우에만 편집 시작"""
+
         selected_items = self.table.selection()
-        # 선택된 항목이 없는 경우 처리
         if not selected_items:
-            messagebox.showwarning("경고", "편집할 항목을 선택해주세요.")
-            return
+            return  # 선택된 항목이 없으면 (즉, 더블클릭한 행이 선택되어 있지 않으면) 메서드를 종료합니다
 
-        # 첫 번째 선택된 항목 가져오기
+        # 선택된 항목들 중 첫 번째 항목의 ID를 가져오기기
         item = selected_items[0]
-        # 클릭된 컬럼 식별
-        column = self.table.identify_column(event.x)  # x 좌표에서 컬럼 찾기
-        # 예시 row = self.table.identify_column(event.y) # y 좌표에서 행 찾기
 
-        # ✅ 디버깅을 위한 출력 추가
-        # 디버깅을 위한 출력
-        print(f"선택된 항목: {item}")
-        print(f"클릭된 컬럼: {column}")
-        print(f"항목 데이터: {self.table.item(item, 'values')}")
+        # 클릭된 컬럼 식별 (#1, #2 등의 형식으로 반환됨)
+        # 마우스 이벤트의 x 좌표를 기반으로 클릭된 컬럼의 식별자를 가져옵니다
+        column = self.table.identify_column(event.x)
+        # 컬럼 식별자에서 '#'을 제거하고 숫자로 변환한 후, 0-based 인덱스로 변환
+        # 예: '#1' → 1 → 0 (첫 번째 컬럼의 인덱스)
+        column_id = int(column.lstrip('#')) - 1
 
-        if column in ('의견1', '의견2'):  # 의견 컬럼들만 수정하게
+        # 컬럼 이름 가져오기
+        column_name = self.table['columns'][column_id]
+
+        # 의견 컬럼인 경우에만 편집 시작
+        if column_name in ('잔여물', 'PAS'):
             self.start_edit(item, column)
 
     def start_edit(self, item, column):
@@ -382,20 +431,25 @@ class PreviewWindow:
         self.editing_item = item
         self.editing_column = column
 
-        # 예시: 항목 정보 가져오기
-        item_data = self.table.item('item_id', 'values')  # 항목의 값들
-        item_text = self.table.item('item_id', 'text')    # 항목의 텍스트
-
         # 현재값 가져오기
-        current_value = self.table.item(item, 'values')[
-            int(column.lstrip('#')) - 1]
+        values = self.table.item(item, 'values')
+        column_id = int(column.lstrip('#')) - 1
+        current_value = values[column_id]
+
+        # 엔트리 위젯 생성 (필요할 때만 생성)
+        if self.entry_edit is None:
+            self.entry_edit = tk.Entry(self.table)
+            self.entry_edit.bind('<Return>', lambda e: self.save_edit())
+            self.entry_edit.bind('<Escape>', self.cancel_edit)
+            self.entry_edit.bind('<FocusOut>', self.cancel_edit)
 
         # 엔트리 위젯 위치
         x, y, width, height = self.table.bbox(item, column)
+        if x is None:  # bbox가 None을 반환하는 경우 처리
+            return
 
-        # 글자수 제한 (30자까지지)
-        wordlimit_cmd = (self.table.register(
-            self.validate_input), '%P')  # %P는 매개변수
+        # 글자수 제한 (30자까지)
+        wordlimit_cmd = (self.table.register(self.validate_input), '%P')
         self.entry_edit.config(validate='key', validatecommand=wordlimit_cmd)
 
         self.entry_edit.place(x=x, y=y, width=width, height=height)
@@ -448,15 +502,21 @@ class PreviewWindow:
                 end_str = VideoUtils.format_time(segment['end'])
                 duration_str = VideoUtils.format_time(segment['duration'])
 
+                # 파일명에서 TYPE 추출 (마지막 2글자)
+                filename = segment.get('file', '')
+                type_value = os.path.splitext(
+                    filename)[0][-2:] if filename else ''
+
                 # 의견 데이터 가져오기 (없으면, 빈 문자열)
                 opinion1 = segment.get('opinion1', '')
                 opinion2 = segment.get('opinion2', '')
 
                 self.table.insert("", "end", values=(
-                    segment.get('file', ''),  # 파일명 포함
+                    filename,  # 파일명
                     start_str,
                     end_str,
                     duration_str,
+                    type_value,  # TYPE 값 (마지막 2글자)
                     opinion1,
                     opinion2))
 
@@ -477,7 +537,7 @@ class PreviewWindow:
         # 확인 대화상자
         if messagebox.askyesno("확인", "선택한 구간을 삭제하시겠습니까?"):
             # 선택된 항목의 인덱스 찾기
-            index = self.table.index(selected_items[0])  # 첫번째 선택된 항목목
+            index = self.table.index(selected_items[0])  # 첫번째 선택된 항목
 
             # 메인 앱의 리스트에서 삭제
             if hasattr(self.app, 'saved_segments') and index < len(self.app.saved_segments):
@@ -485,6 +545,8 @@ class PreviewWindow:
 
                 # 테이블 갱신
                 self.load_table_data()
+                # 선택구간 미리보기 창으로 돌아오기기
+                self.window.focus_force()
 
     def on_close(self):
         """창 닫기 이벤트"""
@@ -495,28 +557,44 @@ class PreviewWindow:
 
     def export_to_csv(self):
         "데이터 csv 파일로 내보내기"
-        file_path = filedialog.asksaveasfilename(defaultextension=".csv",
-                                                 filetypes=[
-                                                     "CSV files", "*.csv"],
-                                                 title="구간데이터_저장")
+        # 현재 비디오 파일명을 기반으로 기본 파일명 생성
+        base_filename = os.path.splitext(os.path.basename(self.video_path))[0]
+        default_filename = f"{base_filename}_구간데이터.csv"
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            initialfile=default_filename,  # 기본 파일명 설정
+            filetypes=[("CSV files", "*.csv")],
+            title="구간데이터_저장"
+        )
 
         if file_path and hasattr(self.app, 'saved_segments'):
-            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(
-                    ['파일명', '시작 시간', '종료 시간', '구간 길이', '의견1', '의견2'])
+            try:
+                with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(
+                        ['파일명', '시작 시간', '종료 시간', '구간 길이', '식이타입', 'PAS', '잔여물'])
 
-                for segment in self.app.saved_segments:
-                    writer.writerow([
-                        segment.get('file', ''),
-                        VideoUtils.format_time(segment['start']),
-                        VideoUtils.format_time(segment['end_time']),
-                        VideoUtils.format_time(segment['duration']),
-                        segment.get('opinion1', ''),
-                        segment.get('opinion2', '')
-                    ])
+                    for segment in self.app.saved_segments:
+                        filename = segment.get('file', '')
+                        type_value = os.path.splitext(
+                            filename)[0][-2:] if filename else ''  # 마지막 2글자
 
-            messagebox.showinfo("성공", f"데이터가 {file_path}에 저장되었습니다.")
+                        writer.writerow([
+                            filename,
+                            VideoUtils.format_time(segment['start']),
+                            VideoUtils.format_time(segment['end']),
+                            VideoUtils.format_time(segment['duration']),
+                            type_value,  # TYPE 값 (마지막 2글자)
+                            segment.get('opinion1', ''),
+                            segment.get('opinion2', '')
+                        ])
+
+                messagebox.showinfo(
+                    "성공", f"데이터가 {os.path.basename(file_path)}에 저장되었습니다.")
+                self.window.focus_force()
+            except Exception as e:
+                messagebox.showerror("오류", f"파일 저장 중 오류가 발생했습니다: {str(e)}")
 
     def start_auto_play(self):
         """자동 재생 시작"""

@@ -137,8 +137,23 @@ class MainTab(BaseTab):
                                          command=self.app.select_position,
                                          from_=0,
                                          to=100,
-                                         length=500)
+                                         length=500,
+                                         style='Horizontal.TScale')  # 스타일 추가
+
+        # 슬라이더 스타일 설정
+        style = ttk.Style()
+        style.configure('Horizontal.TScale',
+                        background='white',
+                        troughcolor='lightgray',
+                        sliderthickness=10)  # 슬라이더 두께 증가
+
         self.position_slider.pack(fill=tk.X, padx=3, pady=5)
+
+        # 슬라이더 이벤트 바인딩 추가 ref link: https://076923.github.io/posts/Python-tkinter-23/
+        self.position_slider.bind(
+            '<Button-1>', lambda e: self.app.select_position(self.position_slider.get()))  # <Button-1>마우스 왼족 버튼 누를때
+        self.position_slider.bind(
+            '<B1-Motion>', lambda e: self.app.select_position(self.position_slider.get()))  # <B1-Motion>마우스 왼쪽 버튼을 누르면서 움직일때때
 
         # 현재 위치 시간
         self.position_label = tk.Label(self.slider_frame, text="00:00")
@@ -199,9 +214,6 @@ class MainTab(BaseTab):
         self.preview_button = tk.Button(
             self.edit_frame, text="선택구간 미리보기", command=lambda: self.app.preview_selection())
         self.preview_button.pack(side=tk.TOP, pady=3)
-
-        # extract_button = tk.Button(edit_frame, text="추출", command=lambda: )
-        # # extract_button.pack(side=tk.LEFT)
 
     def _save_widget_references(self):
         """앱에 위젯 참조 저장"""
