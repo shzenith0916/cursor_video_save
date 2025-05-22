@@ -27,7 +27,7 @@ class PreviewWindow:
         # 새 창 생성
         self.window = tk.Toplevel(root)
         self.window.title("선택 구간 미리보기")
-        self.window.geometry("800x1200")
+        self.window.geometry("800x800")
 
         # UI 생성
         self.create_ui()
@@ -76,7 +76,7 @@ class PreviewWindow:
         """UI 구성 요소 생성"""
         # 메인 프레임
         self.main_frame = tk.Frame(self.window)
-        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         self.video_frame = tk.Frame(self.main_frame, bg="black", width=600)
         self.video_frame.pack(side="left", fill=tk.BOTH, expand=False)
@@ -88,7 +88,7 @@ class PreviewWindow:
         self.video_label.config(bg="black")
 
         # 우측 프레임 (구간 정보 테이블)
-        self.right_frame = tk.Frame(self.main_frame, width=400)
+        self.right_frame = tk.Frame(self.main_frame, width=500)
         self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(10, 0))
         self.right_frame.pack_propagate(False)  # 최소 너비 유지
 

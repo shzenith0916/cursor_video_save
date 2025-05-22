@@ -131,10 +131,10 @@ class MainTab(BaseTab):
         self.slider_frame.pack(side=tk.LEFT, padx=10, pady=10,
                                fill=tk.X, expand=True)
 
-        # 비디오 전체구간 슬라이더 생성
+        # 비디오 전체구간 슬라이더 생성 - command 제거거
         self.position_slider = ttk.Scale(self.slider_frame,
                                          orient='horizontal',
-                                         command=self.app.select_position,
+                                         #  command=self.app.select_position,
                                          from_=0,
                                          to=100,
                                          length=500,
@@ -149,11 +149,11 @@ class MainTab(BaseTab):
 
         self.position_slider.pack(fill=tk.X, padx=3, pady=5)
 
-        # 슬라이더 이벤트 바인딩 추가 ref link: https://076923.github.io/posts/Python-tkinter-23/
-        self.position_slider.bind(
-            '<Button-1>', lambda e: self.app.select_position(self.position_slider.get()))  # <Button-1>마우스 왼족 버튼 누를때
-        self.position_slider.bind(
-            '<B1-Motion>', lambda e: self.app.select_position(self.position_slider.get()))  # <B1-Motion>마우스 왼쪽 버튼을 누르면서 움직일때때
+        # # 슬라이더 이벤트 바인딩 추가 ref link: https://076923.github.io/posts/Python-tkinter-23/
+        # self.position_slider.bind(
+        #     '<Button-1>', lambda e: self.app.select_position(self.position_slider.get()))  # <Button-1>마우스 왼족 버튼 누를때
+        # self.position_slider.bind(
+        #     '<B1-Motion>', lambda e: self.app.select_position(self.position_slider.get()))  # <B1-Motion>마우스 왼쪽 버튼을 누르면서 움직일때때
 
         # 현재 위치 시간
         self.position_label = tk.Label(self.slider_frame, text="00:00")

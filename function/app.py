@@ -150,35 +150,43 @@ class VideoEditorApp:
 
     def show_frame(self, frame):
         """프레임 화면에 표시"""
-        if isinstance(frame, int):  # frame 매개변수가 정수(integer)인지 확인하는 조건문
-            # 프레임 번호를 프레임 데이터로 변환
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame)
-            ret, frame = self.cap.read()
-            if not ret:
-                print(f"Error: Could not read frame {frame}")
-                return
 
-        # 프레임을 PhotoImage로 변환 (유틸리티 함수 사용)
-        photo = VideoUtils.convert_frame_to_photo(frame)
+        try:
+            # 유연한 입력 처리 유지
+            if isinstance(frame, int):  # frame 매개변수가 정수(integer)인지 확인하는 조건문
+                # 프레임 번호를 프레임 데이터로 변환
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame)
+                ret, frame = self.cap.read()
+                if not ret:
+                    print(f"Error: Could not read frame {frame}")
+                    return
 
-        # 코드상 중요 라인!! -> 이미지 객체 참조를 저장
-        self.current_image = photo  #
-        # 매 프레임마다 self.current_image에 새 이미지 참조가 저장되고, 이전 이미지 참조는 자동으로 가비지 컬렉션 대상
-        # 메모리 관리 측면에서, 항상 최신 프레임만 저장하고 메모리가 한 프레임 분량만 사용.
+            # 이미지를 비디오 레이블에 표시. 동적 레이블 생성 유지
+            if self.video_label is None:
+                # video_frame은 create_tabs에서  이미 생성된 프레임어야 함
+                if hasattr(self, "video_frame") and self.video_frame is not None:
+                    print("비디오 레이블 생성 중 ...")
+                    self.video_label = tk.Label(self.video_frame)
+                    self.video_label.pack(expand=True, fill="both")
+                else:
+                    print("Warning: 'video_frame' not found, video label을 생성할 수 없습니다.")
+                    return
 
-        # 이미지를 비디오 레이블에 표시
-        if self.video_label is None:
-            # video_frame은 create_tabs에서  이미 생성된 프레임어야 함
-            if hasattr(self, "video_frame") and self.video_frame is not None:
-                print("비디오 레이블 생성 중 ...")
-                self.video_label = tk.Label(self.video_frame)
-                self.video_label.pack(expand=True, fill="both")
-            else:
-                print("Warning: 'video_frame' not found, video label을 생성할 수 없습니다.")
-                return
+            photo = VideoUtils.convert_frame_to_photo(frame)
 
-        # 이미지 업데이트
-        self.video_label.config(image=photo)
+            # 메모리 관리 유지 측면상 중요한 코드 라인!! -> 이미지 객체 참조를 저장
+            self.current_image = photo  #
+            # 매 프레임마다 self.current_image에 새 이미지 참조가 저장되고, 이전 이미지 참조는 자동으로 가비지 컬렉션 대상
+            # 메모리 관리 측면에서, 항상 최신 프레임만 저장하고 메모리가 한 프레임 분량만 사용.
+
+            # 이미지 업데이트
+            self.video_label.config(image=photo)
+            self.video_label.image = photo  # 중복 참조로 더 안전
+
+        except Exception as e:
+            print(f"Error in showing frame: {e}")
+            import traceback
+            traceback.print_exc()  # 상세한 에러 정보
 
     def update_video(self):
         """비디오 프레임 업데이트"""
@@ -232,45 +240,74 @@ class VideoEditorApp:
 
     def select_position(self, value):
         '''슬라이더 값 변경 시 호출되는 함수'''
-        if self.cap is None:
+        if self.cap is None or not self.cap.isOpened():
             return
 
         try:
             value = float(value)
             frame_num = int(value * self.fps)
 
-            # 현재 슬라이더 값과 새로운 값이 같으면 업데이트하지 않음
-            current_slider_value = float(self.position_slider.get())
-            if abs(current_slider_value - value) < 0.001:  # 부동소수점 비교를 위한 작은 오차 허용
-                return
+            # 📌 슬라이더 값(0-100)을 실제 프레임 번호로 변환
+            total_frames = self.cap.get(cv2.CAP_PROP_FRAME_COUNT)
+            target_frame = int((value / 100.0) * total_frames)
 
-            # 프레임 표시 (재생 중이든 아니든 항상 업데이트)
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            # 프레임 범위 체크
+            if target_frame < 0:
+                target_frame = 0
+            elif target_frame >= total_frames:
+                target_frame = int(total_frames - 1)
+
+            print(
+                f"slider_value: {value}, target frame: {target_frame}/{total_frames}")
+
+            # 📌 프레임 위치 설정 및 표시
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
             ret, frame = self.cap.read()
+
             if ret:
                 self.show_frame(frame)
 
-            # 현재 위치 시간 업데이트
-            current_time = VideoUtils.format_time(int(value))
-            self.position_label.config(text=f"현재 위치: {current_time}")
+                # 📌 실제 현재 시간 계산 (프레임 기반)
+                current_frame = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
+                current_time_secs = current_frame / self.fps
 
-            # 슬라이더 위치 업데이트 (값이 실제로 변경된 경우에만)
-            if abs(current_slider_value - value) >= 0.001:
-                self.position_slider.set(value)
-        except ValueError:
-            pass  # 잘못된 값이 들어왔을 때 무시
+                # 📌 UI 업데이트
+                current_time_str = VideoUtils.format_time(
+                    int(current_time_secs))
+                self.position_label.config(text=current_time_str)
+
+                # 📌 현재 시간을 인스턴스 변수에 저장 (다른 메서드에서 사용할 수 있도록)
+                self.current_time_str = current_time_secs
+
+            else:
+                print(f"Failed to read frame {target_frame}")
+
+        except Exception as e:
+            print(f"Error in select_position: {str(e)}")
+            import traceback
+            traceback.print_exc()  # 상세한 에러 정보
 
     def preview_selection(self):
         '''선택구간 미리보기" 버튼을 눌렀을 때 호출되는 함수 (UI 이벤트 핸들러)'''
 
         # 비디오 로드 여부 확인
-        if not self.cap or self.video_path == "":
+        if not self.cap or not hasattr(self, "video_path") or self.video_path == "":
             tk.messagebox.showwarning("경고", "비디오를 먼저 로드해주세요.")
             return
 
-        # 구간이 있는지 그리고 구간 유효성 검사사
+        # 📌 start_time과 end_time이 설정되었는지 확인
+        if not hasattr(self, 'start_time') or not hasattr(self, 'end_time'):
+            tk.messagebox.showwarning("경고", "시작 시간과 종료 시간을 먼저 설정해주세요.")
+            return
+
+        # 구간이 있는지 그리고 구간 유효성 검사
         if self.start_time >= self.end_time:
             tk.messagebox.showwarning("경고", "시작 시간이 종료 시간보다 크거나 같습니다.")
+            return
+
+        # 📌 구간 길이가 너무 짧은지 확인
+        if (self.end_time - self.start_time) < 0.1:  # 0.1초 미만
+            tk.messagebox.showwarning("경고", "선택 구간이 너무 짧습니다. (최소 0.1초)")
             return
 
         # 이미 열린 미리보기 창이 있다면 닫기
@@ -282,20 +319,31 @@ class VideoEditorApp:
 
         # 새 미리보기 창 생성 및 인스턴스 유지
         try:
+            # 📌 비디오 경로가 StringVar인 경우 처리
+            video_path = self.video_path
+            if hasattr(video_path, "get"):  # StringVar인 경우
+                video_path = video_path.get()
+
+            print(
+                f"Creating preview window: {video_path}, {self.start_time} - {self.end_time}")
+
             self.preview_window = PreviewWindow(
                 self.root,  # 메인 윈도우(root) 를 부모로 전달
                 self,  # App instance를 참조로 전달
-                self.video_path,
+                video_path,
                 self.start_time,
                 self.end_time
             )
+
+            # 미리보기 창이 닫힐 때 참조 제거
+            self.preview_window.window.protocol("WM_DELETE_WINDOW",
+                                                lambda: self._on_preview_window_close())
+
         except Exception as e:
             print(f"미리보기 창 생성 오류: {str(e)}")
-            return
-
-        # 미리보기 창이 닫힐 때 참조 제거
-        self.preview_window.window.protocol("WM_DELETE_WINDOW",
-                                            lambda: self._on_preview_window_close())
+            import traceback
+            traceback.print_exc()
+            tk.messagebox.showerror("오류", f"미리보기 창 생성 중 오류가 발생했습니다:\n{str(e)}")
 
     def _on_preview_window_close(self):
         """미리보기 창이 닫힐 때 호출되는 콜백"""

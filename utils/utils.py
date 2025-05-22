@@ -20,9 +20,35 @@ class VideoUtils:
     def convert_frame_to_photo(frame):
         """OpenCV 프레임을 Tkinter PhotoImage로 변환.
            비디오 프레임에서 이 이미지를 이용하여 재생"""
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image = Image.fromarray(frame)
-        return ImageTk.PhotoImage(image=image)
+
+        try:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(frame_rgb)
+            return ImageTk.PhotoImage(image=pil_image)
+        except Exception as e:
+            print(f"Frame conversion error: {e}")
+            return None
+
+    @staticmethod
+    def convert_frame_to_photo_optimized(frame, target_width=None, target_height=None):
+        """최적화된 OpenCV 프레임을 Tkinter PhotoImage로 변환"""
+        try:
+            # BGR -> RGB 변환
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(frame_rgb)
+
+            # PIL 이미지 생성
+            # 📌 타겟 크기가 지정된 경우 리사이즈
+            if target_width and target_height:
+                # 비율 유지하면서 리사이즈
+                pil_img.thumbnail((target_width, target_height),
+                                  Image.Resampling.LANCZOS)
+
+            return ImageTk.PhotoImage(pil_img)
+
+        except Exception as e:
+            print(f"Frame Conversion Error: {e}")
+            return None
 
     @staticmethod
     def get_video_properties(cap):
@@ -84,21 +110,6 @@ class VideoUtils:
 
         # 프레임 읽기
         return cap.read()
-
-    @staticmethod
-    def convert_frame_to_photo_optimized(frame, target_width=None, target_height=None):
-        """최적화된 OpenCV 프레임을 Tkinter PhotoImage로 변환"""
-        try:
-            # BGR -> RGB 변환
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            # PIL 이미지 생성
-            pil_img = Image.fromarray(frame_rgb)
-            return ImageTk.PhotoImage(pil_img)
-
-        except Exception as e:
-            print(f"Frame Conversion Error: {e}")
-            return None
 
     @staticmethod
     def calculate_optimal_fps(original_fps, max_fps=30):
