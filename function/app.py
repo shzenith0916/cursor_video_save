@@ -244,12 +244,12 @@ class VideoEditorApp:
             return
 
         try:
-            value = float(value)
+            value = float(value)  # 슬라이더 값은 초 단위
             frame_num = int(value * self.fps)
 
-            # 📌 슬라이더 값(0-100)을 실제 프레임 번호로 변환
+            # 프레임 번호 계산 (초 * fps)
+            target_frame = frame_num
             total_frames = self.cap.get(cv2.CAP_PROP_FRAME_COUNT)
-            target_frame = int((value / 100.0) * total_frames)
 
             # 프레임 범위 체크
             if target_frame < 0:
