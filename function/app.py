@@ -376,4 +376,11 @@ class VideoEditorApp:
 
     def get_saved_segments(self):
         """저장된 구간 목록 반환"""
+        # init 메서드 안에서 saved segments 리스트 초기화 되어 있음
         return self.saved_segments
+
+    def save_segment(self, segment):
+        """구간 저장"""
+        print(f"save_segment 호출됨: {segment}")
+        self.saved_segments.append(segment)
+        print(f"현재 저장된 구간 수: {len(self.saved_segments)}")
