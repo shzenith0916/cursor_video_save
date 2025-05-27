@@ -1,21 +1,11 @@
 from .base_tab import BaseTab
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import cv2
 import os
-from PIL import Image, ImageTk
-from datetime import datetime
 from utils.utils import VideoUtils
 from ui_components.segment_table import SegmentTable
-
-# command = [
-#     'ffmpeg',
-#     '-i', input_video_path,
-#     '-ss', str(start_time),
-#     '-to', str(end_time),
-#     '-c', 'copy',  # 코덱 복사
-#     output_video_path
-# ]
+from function.extractor import VideoExtractor, ExtractConfig
+import threading
 
 
 class NewTab(BaseTab):
@@ -33,6 +23,10 @@ class NewTab(BaseTab):
         self.video_path = None
         self.start_time = None
         self.end_time = None
+
+        # 구간 추출 관련변수
+        self.current_segment = None
+        self.extract_config = ExtractConfig()
 
         # 성능 최적화 관련 속성
         self.target_fps = 30
@@ -55,7 +49,7 @@ class NewTab(BaseTab):
         # SegmentTable 컴포넌트 사용
         self.segment_table = SegmentTable(self.left_frame, self.app)
 
-        # 오른쪽 프레임 (비디오 컨트롤)
+        # 오른쪽 프레임 (비디오 정보)
         self.right_frame = tk.Frame(self.main_frame)
         self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
@@ -71,6 +65,8 @@ class NewTab(BaseTab):
             wraplength=400
         )
         self.file_info_label.pack(expand=True, fill="both")
+
+        self.segment_table.selection_callback = self.on_segment_selected
 
     def file_info_update(self, file_path=None, start_time=None, end_time=None):
         """비디오 파일 정보와 선택된 구간 정보를 업데이트하는 메서드"""
@@ -111,19 +107,19 @@ class NewTab(BaseTab):
                 segment_duration = end_time - start_time
                 segment_info = f"""
 
-선택된 구간:
+✂️ 선택된 구간:
 시작 시간: {VideoUtils.format_time(start_time)}
 종료 시간: {VideoUtils.format_time(end_time)}
 구간 길이: {VideoUtils.format_time(segment_duration)}"""
 
-            info_text = f"""파일 정보:
+            info_text = f"""📁 파일 정보:
 파일명: {os.path.basename(file_path)}
 경로: {file_path}
 크기: {format_size(file_size)}
 생성일: {datetime.fromtimestamp(created_time).strftime('%Y-%m-%d %H:%M:%S')}
 수정일: {datetime.fromtimestamp(modified_time).strftime('%Y-%m-%d %H:%M:%S')}
 
-비디오 속성:
+🎬 비디오 속성:
 해상도: {props['width']} x {props['height']}
 프레임 레이트: {props['fps']:.2f} fps
 전체 길이: {VideoUtils.format_time(props['length'])}
@@ -135,6 +131,31 @@ class NewTab(BaseTab):
         except Exception as e:
             self.file_info_label.config(text=f"파일 정보를 불러오는 중 오류 발생: {str(e)}")
 
+    def on_segment_selected(self, segment_info):
+        """SegmentTable에서 구간 행이 선택되었을때 호출되는 콜백 메서드"""
+        print(f"선택된 구간: {segment_info}")
+
+        # 선택된 구간의 파일 경로 처리
+        file_path = segment_info['file']
+
+        # 파일명만 있는 경우 전체 경로로 반환
+        if hasattr(self.app, 'video_path') and self.app.video_path:
+            if hasattr(self.app.video_path, 'get'):
+                full_path = self.app.video_path.get()
+            else:
+                full_path = self.app.video_path
+
+            # 파일명이 일치하면, 전체경로 사용
+            if os.path.basename(full_path) == file_path:
+                file_path = full_path
+
+        # 선택한 구간 정보로 파일 정보 업데이트
+        self.file_info_update(
+            file_path=file_path,
+            start_time=segment_info['start'],
+            end_time=segment_info['end']
+        )
+
     def refresh_table(self):
         """테이블 새로고침 메서드"""
         print("NewTab: refresh_table 호출됨")
@@ -144,10 +165,11 @@ class NewTab(BaseTab):
             self.segment_table.refresh()
             print("비디오 추출 탭: 테이블 새로고침 완료.")
 
-            # 가장 최근 정보로 구간정보 업데이트
+            # 가장 최근 구간간을 자동선택 후 정보 표시
             if self.app.saved_segments:
                 latest_segment = self.app.saved_segments[-1]
                 print(f"최신 구간 정보로 파일 정보 업데이트: {latest_segment}")
+
                 # 파일 경로가 파일명만 있는 경우 전체 경로로 변환
                 file_path = latest_segment['file']
                 if hasattr(self.app, 'video_path') and self.app.video_path:
@@ -166,5 +188,60 @@ class NewTab(BaseTab):
                     start_time=latest_segment['start'],
                     end_time=latest_segment['end']
                 )
+
+                # 가장 최근 구간간 행을 시각적으로도 선택
+                if hasattr(self.app, 'segment_table'):
+                    items = self.segment_table.tree.get_children()
+                    if items:
+                        self.segment_table.tree.selection_set(items[-1])
+                        self.segment_table.tree.see(items[-1])
+                        self.segment_table.tree.focus(items[-1])
+
         else:
             print("비디오 추출 탭: 선택 구간 테이블이 존재하지 않음")
+
+    def create_extract_button_section(self):
+        """추출 버튼 섹션 생성"""
+
+        button_frame = tk.Frame(self.right_frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # 추출 버튼 생성
+        extract_button = ttk.Button(
+            button_frame,
+            text="🎬 선택 구간 추출",
+            command=self.extract_selected_segment,
+            width=10,
+            style="Accent.TButton"
+        )
+        extract_button.pack(side=tk.LEFT, padx=5)
+
+        # 취소 버튼 생성
+        cancel_button = ttk.Button(
+            button_frame,
+            text=" ❌ 선택 구간 추출 취소",
+            command=self.click_cancel_button,
+            width=10,
+            style="Accent.TButton"
+        )
+        cancel_button.pack(side=tk.LEFT, padx=5)
+        
+        # 진행률 바 생성
+        self.progress_bar = ttk.Progressbar(
+            button_frame,
+            orient="horizontal",
+            length=300,
+            mode="determinate" # 진행바가 처음부터 Value까지 채워짐
+        )
+        self.progress_bar.pack(side=tk.LEFT, padx=5)
+
+    def extract_selected_segment(self):
+        """선택된 구간 추출 메서드"""
+        
+    def click_cancel_button(self):
+        """취소 버튼 클릭 이벤트 처리"""
+        print("취소 버튼 클릭됨")
+
+        # 진행률 바 초기화
+        self.progress_bar['value'] = 0
+        

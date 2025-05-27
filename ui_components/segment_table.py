@@ -5,9 +5,11 @@ from utils.utils import VideoUtils
 
 
 class SegmentTable:
-    def __init__(self, root, app):
+    def __init__(self, root, app, selection_callback=None):
         self.root = root
         self.app = app
+        # NewTab의 on_segment_selected 메서드가 저장됨
+        self.selection_callback = selection_callback
         self.entry_edit = None
         self.editing_item = None
         self.editing_column = None
@@ -18,6 +20,9 @@ class SegmentTable:
 
         # 테이블 생성
         self.create_table()
+
+        # 테이블 데이터 업데이트
+        self.refresh()
 
     def create_table(self):
         """테이블 생성"""
@@ -59,6 +64,7 @@ class SegmentTable:
             "잔여물": (100, tk.CENTER)
         }
 
+        # 컬럼 헤더 설정정
         for col, (width, anchor) in columns.items():
             self.table.heading(col, text=col, anchor=anchor)
             self.table.column(col, width=width, minwidth=width, stretch=True)
@@ -66,6 +72,8 @@ class SegmentTable:
         # 이벤트 바인딩
         self.container.bind('<Configure>', self._on_container_resize)
         self.table.bind('<Double-1>', self.on_item_doubleclick)
+        # 구간 선택 이벤트 추가
+        self.table.bind('<<TreeviewSelect>>', self.on_item_select)
 
         # 버튼 프레임
         button_frame = tk.Frame(self.container)
@@ -85,6 +93,29 @@ class SegmentTable:
 
         # 초기 데이터 로드
         self.load_table_data()
+
+    def on_item_select(self, event):
+        """구간 선택 시 호출되는 이벤트 핸들러"""
+
+        select = self.table.selection()
+        # selection_callback은 함수포인터(콜백 함수)로, newtab에서 정의한 on_segment_selected 메서드를 Segment Table에 전달
+        if select and self.selection_callback:
+            try:
+                # 선택된 행의 인덱스 가져오기
+                index = self.table.index(select[0])
+
+                # 원본 데이터에서 구간 정보 가져오기
+                if hasattr(self.app, 'saved_segments') and self.app.saved_segments \
+                        and index < len(self.app.saved_segments):
+
+                    selected_segment = self.app.saved_segments[index]
+                    print(f"선택된 구간: {selected_segment}")
+
+                    # 콜백 함수 호출
+                    self.selection_callback(selected_segment)
+
+            except Exception as e:
+                print(f"행 선택 처리 중 오류 발생: {e}")
 
     def _on_container_resize(self, event):
         """컨테이너 크기 변경 시 테이블 컬럼 너비 조정"""
@@ -261,3 +292,10 @@ class SegmentTable:
     def refresh(self):
         """테이블 데이터 새로고침"""
         self.load_table_data()
+
+    def select_first_item(self):
+        """첫 번째 항목 선택 (새로고침 후 자동 선택용)"""
+        items = self.table.get_children()
+        if items:
+            self.table.selection_set(items[0])
+            self.table.see(items[0])  # 스크롤해서 보이게 하기
