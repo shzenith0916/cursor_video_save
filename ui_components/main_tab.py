@@ -15,19 +15,13 @@ class MainTab(BaseTab):
     def _init_variables(self):
         "Initialize MainTab UI variables"
         # 프레임 변수들
-        self.top_frame = None  # 상단 (없음)
-        self.openfile_frame = None  # 상단 (파란색)
-        self.info_frame = None  # 상단 (노란색)
-        self.video_frame = None  # 중간간 (빨간색)
-        self.container_frame = None  # 하단 (초록색색)
-        self.slider_frame = None  # 하단 (노란색)
-        self.control_frame = None  # 하단(파란색)
-        self.edit_frame = None  # 하단(보라색)
+        self.table_frame = None  # 왼쪽 (파란색)
+        self.info_frame = None  # 오른쪽 (노란색)
 
         # 참조 위젯 변수들
         self.videofile_label = None
         self.videofile_entry = None
-        self.video_select_button = None
+        self.file_select_button = None
         self.video_info_label = None
         self.video_label = None
         self.position_slider = None
@@ -54,50 +48,48 @@ class MainTab(BaseTab):
         self.top_frame = tk.Frame(
             self.frame, highlightbackground="black", highlightthickness=1)
         self.top_frame.pack(pady=20, padx=20, fill=tk.X)
-        # ✅  자식 위젯 크기에 따라 부모가 수축하지 않도록 막는 설정
+        # 자식 위젯 크기에 따라 부모가 수축하지 않도록 막는 설정
         self.top_frame.pack_propagate(False)
 
-        # ✅ top_frame 내에서 column 1 (openfile_frame)에 가중치 부여
-        # openfile_frame은 top_frame 전체 너비를 차지하면서, 그 안의 Entry도 늘어나게 됩니다.
-        self.top_frame.columnconfigure(1, weight=3)
+        # ✅ top_frame 내에서 column 0 (openfile_frame)에 가중치 부여
+        # openfile_frame은 왼쪽에 위치하면서 필요한 공간만 차지
+        self.top_frame.columnconfigure(0, weight=1)
 
-        # info 프레임 (왼쪽)
-        self.info_frame = tk.Frame(self.top_frame, highlightbackground="orange",
-                                   highlightthickness=1)
-        self.info_frame.grid(row=0, column=0, padx=10,
-                             pady=10, sticky="nsew")  # grid에서 column 0
-
-        # 비디오 정보를 인포 프레임에 추가
-        self.video_info_label = tk.Label(
-            self.info_frame, text="", font=("Arial", 10), fg="gray", anchor="w", justify="left")
-        self.video_info_label.pack(fill=tk.X, expand=True, padx=5, pady=5)
-
-        # openfile 프레임 (오른쪽)
+        # openfile 프레임 (왼쪽으로 이동)
         self.openfile_frame = tk.Frame(self.top_frame, highlightbackground="blue",
                                        highlightthickness=1)
         self.openfile_frame.grid(
-            row=0, column=1, padx=(0, 15), sticky="nsew")  # grid에서 column 1
-
-        # openfile_frame (Entry가 속한 column)이 가로로 늘어나도록 설정
-        self.openfile_frame.columnconfigure(1, weight=1)
+            row=0, column=0, padx=(15, 0), sticky="w")  # grid에서 column 0, sticky="w"로 왼쪽 붙이기
 
         # 파일 경로를 표시할 StringVar 생성
         self.app.video_path = tk.StringVar()
         # 비디오 파일 선택 텍스트
         self.videofile_label = tk.Label(
             self.openfile_frame, text="비디오 파일 선택:", font=("Arial", 12))
-        self.videofile_label.grid(row=0, column=0, padx=(5, 5), sticky="w")
+        self.videofile_label.grid(row=0, column=0, padx=(
+            5, 5), sticky="w")  # width=60 제거 + sticky="w" 로 왼쪽으로 붙이기
 
-        # ✅ width=60 제거 + sticky="we"
+        # 엔트리 박스 크기 조정하여 레이블 바로 옆에 붙이기
         self.videofile_entry = tk.Entry(
-            self.openfile_frame, textvariable=self.app.video_path, width=60)
-        # 엔트리 위젯은 sticky="we" 로 가로 방향을 늘릴 수 있습니다.
-        self.videofile_entry.grid(row=0, column=1, padx=(0, 5))
+            self.openfile_frame, textvariable=self.app.video_path, width=40)
+        # "we"로 가로 방향을 늘릴 수 있습니다.
+        self.videofile_entry.grid(row=0, column=1, padx=(0, 5), sticky="we")
 
         # 비디오 선택 버튼 생성
         self.video_select_button = tk.Button(
             self.openfile_frame, text="파일 선택", command=self.app.open_file)
         self.video_select_button.grid(row=0, column=2, padx=(0, 5))
+
+        # info 프레임 (오른쪽으로 이동)
+        self.info_frame = tk.Frame(self.top_frame, highlightbackground="orange",
+                                   highlightthickness=1)
+        self.info_frame.grid(row=0, column=1, padx=10,
+                             pady=10, sticky="e")  # grid에서 column 1, sticky="e"로 오른쪽 붙이기
+
+        # 비디오 정보를 인포 프레임에 추가
+        self.video_info_label = tk.Label(
+            self.info_frame, text="", font=("Arial", 10), fg="gray", anchor="e", justify="right")
+        self.video_info_label.pack(fill=tk.X, expand=True, padx=5, pady=5)
 
     def create_video_frame(self):
         """중간 프레임 생성 - 파일 선택 (빨간색 테두리)
@@ -209,6 +201,22 @@ class MainTab(BaseTab):
                                         command=self.app.set_end_time, state=tk.DISABLED)
         self.set_end_button.pack(side=tk.LEFT, padx=5)
 
+        # 구간 저장 버튼 추가
+        self.save_frame = tk.Frame(self.edit_frame)
+        self.save_frame.pack(side=tk.TOP, pady=6)
+        self.save_segment_button = tk.Button(
+            self.save_frame,
+            text="💾 구간 저장",
+            command=self.app.save_current_segment,
+            font=("Arial", 10, "bold"),
+            bg="#4CAF50",
+            fg="white",
+            relief="raised",
+            bd=2,
+            state=tk.DISABLED
+        )
+        self.save_segment_button.pack(pady=2)
+
     def create_preview_button(self):
         """선택구간 미리보기 버튼 생성"""
         self.preview_button = tk.Button(
@@ -234,3 +242,7 @@ class MainTab(BaseTab):
         self.app.stop_button = self.stop_button
         self.app.set_start_button = self.set_start_button
         self.app.set_end_button = self.set_end_button
+
+        # 구간 저장 버튼 참조 추가
+        if hasattr(self, 'save_segment_button'):
+            self.app.save_segment_button = self.save_segment_button

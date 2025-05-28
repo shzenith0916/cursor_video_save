@@ -77,19 +77,94 @@ class SegmentTable:
 
         # 버튼 프레임
         button_frame = tk.Frame(self.container)
-        button_frame.pack(fill=tk.X, pady=5)
+        button_frame.pack(fill=tk.X, pady=10)
+
+        # 버튼 스타일 설정
+        self.button_style = ttk.Style()
+
+        # 기본 버튼 스타일 (RAISED 효과)
+        self.button_style.configure(
+            "Raised.TButton",
+            relief="raised",
+            borderwidth=2,
+            focuscolor="none",
+            padding=(15, 10),  # 패딩 증가로 버튼 크기 증가
+            font=("Arial", 10, "bold")
+        )
+
+        # 호버 효과 스타일 (테두리 진하게)
+        self.button_style.map(
+            "Raised.TButton",
+            relief=[('pressed', 'sunken'),
+                    ('active', 'raised')],
+            borderwidth=[('pressed', '3'),
+                         ('active', '3'),
+                         ('!active', '2')],
+            background=[('active', '#E8F4FD'),
+                        ('pressed', '#D0E8F2')]
+        )
+
+        # 삭제 버튼 (빨간색 계열)
+        self.button_style.configure(
+            "Delete.TButton",
+            relief="raised",
+            borderwidth=2,
+            focuscolor="none",
+            padding=(15, 10),
+            font=("Arial", 10, "bold")
+        )
+
+        self.button_style.map(
+            "Delete.TButton",
+            relief=[('pressed', 'sunken'),
+                    ('active', 'raised')],
+            borderwidth=[('pressed', '3'),
+                         ('active', '3'),
+                         ('!active', '2')],
+            background=[('active', '#FFE8E8'),
+                        ('pressed', '#FFD0D0')]
+        )
+
+        # 내보내기 버튼 (초록색 계열)
+        self.button_style.configure(
+            "Export.TButton",
+            relief="raised",
+            borderwidth=2,
+            focuscolor="none",
+            padding=(15, 10),
+            font=("Arial", 10, "bold")
+        )
+
+        self.button_style.map(
+            "Export.TButton",
+            relief=[('pressed', 'sunken'),
+                    ('active', 'raised')],
+            borderwidth=[('pressed', '3'),
+                         ('active', '3'),
+                         ('!active', '2')],
+            background=[('active', '#E8F5E8'),
+                        ('pressed', '#D0E8D0')]
+        )
 
         # 삭제 버튼
-        delete_button = tk.Button(button_frame,
-                                  text="선택 구간 삭제",
-                                  command=self.delete_selected_segment)
-        delete_button.pack(side=tk.LEFT, padx=5)
+        delete_button = ttk.Button(
+            button_frame,
+            text="선택 구간 삭제",
+            command=self.delete_selected_segment,
+            style="Delete.TButton",
+            width=20
+        )
+        delete_button.pack(side=tk.LEFT, padx=8, pady=2)
 
         # CSV 내보내기 버튼
-        export_button = tk.Button(button_frame,
-                                  text="CSV로 내보내기",
-                                  command=self.export_to_csv)
-        export_button.pack(side=tk.LEFT, padx=5)
+        export_button = ttk.Button(
+            button_frame,
+            text="CSV로 내보내기",
+            command=self.export_to_csv,
+            style="Export.TButton",
+            width=20
+        )
+        export_button.pack(side=tk.LEFT, padx=8, pady=2)
 
         # 초기 데이터 로드
         self.load_table_data()
@@ -243,8 +318,6 @@ class SegmentTable:
             if hasattr(self.app, 'saved_segments') and index < len(self.app.saved_segments):
                 del self.app.saved_segments[index]
                 self.load_table_data()
-                if hasattr(self.parent, 'focus_force'):
-                    self.parent.focus_force()
 
     def export_to_csv(self):
         """CSV 내보내기"""
@@ -284,8 +357,6 @@ class SegmentTable:
 
                 messagebox.showinfo(
                     "성공", f"데이터가 {os.path.basename(file_path)}에 저장되었습니다.")
-                if hasattr(self.parent, 'focus_force'):
-                    self.parent.focus_force()
             except Exception as e:
                 messagebox.showerror("오류", f"파일 저장 중 오류가 발생했습니다: {str(e)}")
 

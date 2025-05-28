@@ -39,7 +39,6 @@ class PreviewWindow:
         self.current_image = None
         self.current_time = self.start_time  # 변수로 받은 start_time을 넣어주어야 함.
         self.update_thread = None  # 추가!
-        self.loop_play = True  # 동영상 루프로 재생 여부
 
         # 비디오 초기화
         self.cap, self.fps = VideoUtils.initialize_video(video_path)
@@ -107,16 +106,6 @@ class PreviewWindow:
             font=("Arial", 12),
             command=self.toggle_play)
         self.play_button.pack(side=tk.LEFT, padx=5)
-
-        # 정지 버튼
-        self.loop_var = tk.BooleanVar(value=True)
-        self.loop_check = tk.Checkbutton(
-            self.control_frame,
-            text="루프 재생",
-            font=("Arial", 12),
-            variable=self.loop_var,
-            command=self.toggle_loop)
-        self.loop_check.pack(side=tk.LEFT, padx=5)
 
         # 저장 버튼
         self.save_button = tk.Button(
@@ -197,17 +186,11 @@ class PreviewWindow:
         if not self.is_playing:
             return
 
-        # 현재시간 확인
+        # 현재시간 확인 - 구간 끝에 도달하면 재생 중지
         if self.current_time >= self.end_time:
-            if self.loop_play:  # 루프 재생: 시작점으로 이동
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES,
-                             int(self.start_time * self.fps))
-                self.current_time = self.start_time
-            else:
-                # 루프 비활성화 - 재생 중지
-                self.is_playing = False
-                self.play_button.config(text="▶")
-                return
+            self.is_playing = False
+            self.play_button.config(text="▶")
+            return
 
         ret, frame = self.cap.read()
         if ret:
@@ -244,37 +227,30 @@ class PreviewWindow:
             # after 메서드를 사용하여 프레임 업데이트 시작
             self.update_frames_optimized()
 
-    def toggle_loop(self):
-        """루프 재생 설정 변경"""
-        self.loop_play = self.loop_var.get()
-
     def save_selection(self):
-        """현재 선택 구간 저장"""
-        # 새 구간 생성
-        new_segment = {
-            'file': os.path.basename(self.video_path),
-            'start': self.start_time,
-            'end': self.end_time,
-            'duration': self.end_time - self.start_time,
-            'type': os.path.splitext(os.path.basename(self.video_path))[0][-2:]
-        }
+        """현재 선택 구간 저장 - 중앙화된 메서드 사용"""
+        # 임시로 app의 start_time, end_time을 저장 (기존 값 백업)
+        original_start = getattr(self.app, 'start_time', 0)
+        original_end = getattr(self.app, 'end_time', 0)
 
-        # 중복 체크
-        for segment in self.app.saved_segments:
-            if (abs(segment['start'] - self.start_time) < 0.1) and (abs(segment['end'] - self.end_time) < 0.1):
-                messagebox.showinfo("💡알림", "이미 동일한 구간이 저장되어 있습니다.")
-                self.window.focus_force()  # 미리보기 창으로 포커스 강제 이동
-                return
+        try:
+            # 미리보기 창의 구간 정보를 app에 임시 설정
+            self.app.start_time = self.start_time
+            self.app.end_time = self.end_time
 
-        # 구간을 앱의 saved_segments에 직접 추가 (콜백 없이)
-        self.app.saved_segments.append(new_segment)
+            # 중앙화된 저장 메서드 사용
+            success = self.app.save_current_segment(self.video_path)
 
-        # PreviewWindow의 테이블만 새로고침
-        if hasattr(self, 'segment_table'):
-            self.segment_table.refresh()
+            if success:
+                # PreviewWindow의 테이블 새로고침
+                if hasattr(self, 'segment_table'):
+                    self.segment_table.refresh()
+                self.window.focus_force()
 
-        messagebox.showinfo("💡알림", "구간이 저장되었습니다.")
-        self.window.focus_force()
+        finally:
+            # 원래 값 복원
+            self.app.start_time = original_start
+            self.app.end_time = original_end
 
     def on_close(self):
         """창 닫기 이벤트"""
