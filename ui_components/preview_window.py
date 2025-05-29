@@ -1,5 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+import ttkbootstrap as ttk  # ttkbootstrap으로 변경
+from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
+from tkinter import messagebox, filedialog
 import cv2
 import threading
 import time
@@ -60,7 +62,7 @@ class PreviewWindow:
 
         # 자동 재생 시작
         if self.auto_play:
-            self.window.after(500, self.start_auto_play)  # 500ms 이후 자동 재생생
+            self.window.after(500, self.start_auto_play)  # 500ms 이후 자동 재생
 
         # 창닫기 이벤트 바인딩
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -73,6 +75,7 @@ class PreviewWindow:
 
     def create_ui(self):
         """UI 구성 요소 생성"""
+
         # 메인 프레임
         self.main_frame = tk.Frame(self.window)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -95,46 +98,58 @@ class PreviewWindow:
         self.segment_table = SegmentTable(self.right_frame, self.app)
 
         # 컨트롤 플레임
-        self.control_frame = tk.Frame(self.window)
-        self.control_frame.pack(fill=tk.X, padx=10, pady=5)
+        self.video_control_frame = tk.Frame(self.window)
+        self.video_control_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        # 좌측: 재생 컨트롤
+        self.control_left = tk.Frame(self.video_control_frame)
+        self.control_left.pack(side=tk.LEFT, padx=5)
+
+        # 중앙: 시간 정보
+        self.control_center = tk.Frame(self.video_control_frame)
+        self.control_center.pack(side=tk.LEFT, padx=5)
+
+        # 우측: 구간 저장 버튼
+        self.control_right = tk.Frame(self.video_control_frame)
+        self.control_right.pack(side=tk.RIGHT, padx=5)
 
         # 재생/일시정지 버튼
-        self.play_button = tk.Button(
-            self.control_frame,
-            text="⏸",
-            width=5,
-            font=("Arial", 12),
+        self.play_button = ttk.Button(
+            self.control_left,
+            text="⏸️",
+            bootstyle=SUCCESS,
             command=self.toggle_play)
-        self.play_button.pack(side=tk.LEFT, padx=5)
+        self.play_button.pack(side=tk.LEFT, padx=8)
 
-        # 저장 버튼
-        self.save_button = tk.Button(
-            self.control_frame,
-            text="구간 저장",
-            font=("Arial", 12),
-            command=self.save_selection)
-        self.save_button.pack(side=tk.LEFT, padx=10)
-
-        # 구간 정보 레이블
-        self.segment_info = f"구간: {VideoUtils.format_time(self.start_time)} - {VideoUtils.format_time(self.end_time)}"
-        self.segment_label = tk.Label(
-            self.control_frame,
-            text=self.segment_info,
-            font=("Arial", 11),
-            fg='blue')
-        self.segment_label.pack(side=tk.RIGHT, padx=5)
-
-        # 위치 레이블
+        # 위치 레이블 (먼저 배치)
         self.position_label = tk.Label(
-            self.control_frame,
+            self.control_center,
             text=f"{VideoUtils.format_time(self.start_time)} / {VideoUtils.format_time(self.end_time)}",
             font=("Arial", 11)
         )
         self.position_label.pack(side=tk.RIGHT, padx=5)
 
+        # 구간 정보 레이블 (위치 레이블 다음 배치치)
+        self.segment_info = f"구간: {VideoUtils.format_time(self.start_time)} - {VideoUtils.format_time(self.end_time)}"
+        self.segment_label = tk.Label(
+            self.control_center,
+            text=self.segment_info,
+            font=("Arial", 11, "bold"),
+            fg='#0000FF')  # 더 진한 파란색 사용
+        self.segment_label.pack(side=tk.RIGHT, padx=5)
+
+        # 저장 버튼 (우측 프레임 먼저 배치. 도움말 다음 배치)
+        self.save_button = ttk.Button(
+            self.control_right,
+            text="💾 구간 저장",
+            bootstyle=SUCCESS,
+            command=self.save_selection
+        )
+        self.save_button.pack(side=tk.LEFT, padx=10)
+
         # ✅ 추가!! 도움말 레이블
-        help_label = tk.Label(self.control_frame,
-                              text="💡 하단 왼쪽 버튼을 클릭하면 재생/일시정지 됩니다.",
+        help_label = tk.Label(self.control_right,
+                              text="💡 구간저장 버튼 클릭시, 모든 탭 테이블에 저장됩니다.",
                               font=("Arial", 11),
                               fg='gray')
         help_label.pack(side=tk.RIGHT, padx=10)

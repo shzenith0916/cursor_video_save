@@ -1,20 +1,30 @@
-import tkinter as tk  # gui 모듈 포함하여 import
-from tkinter import ttk, messagebox, filedialog
 import os
 import cv2
+import numpy as np
+import csv
 from PIL import Image, ImageTk
 import threading
-from ui_components import create_tabs
+
+import tkinter as tk  # gui 모듈 포함하여 import
+import ttkbootstrap as ttk  # ttkbootstrap으로 변경
+from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
+from tkinter import messagebox, filedialog
+from utils.styles import AppStyles
 from utils.utils import VideoUtils
+from ui_components import create_tabs
 from ui_components.preview_window import PreviewWindow
 
 
 class VideoEditorApp:
     def __init__(self, root):
         self.root = root  # root를 self.root로 저장
-        self.root.title("비디오 부분 추출 App")
-        self.root.geometry("1000x1000")
+        self.root.title("비디오 편집기")
+        self.root.geometry("1400x900")
         self.root.resizable(True, True)
+
+        # ttkbootstrap 스타일 객체 생성
+        style = ttk.Style()  # theme 인자 제거
+        AppStyles.configure_styles(style)  # 스타일 객체를 전달하여 사용자 정의 스타일 설정
 
         # 비디오 관련 변수
         self.video_path = ""
@@ -22,7 +32,7 @@ class VideoEditorApp:
         self.fps = None
         self.frame_count = 0
         self.video_length = 0
-        self.current_frame = None
+        self.current_frame = 0
 
         # 재생 관련 변수
         self.is_playing = False
@@ -103,7 +113,7 @@ class VideoEditorApp:
 
             # 초기 종료 위치 비디오 끝으로 설정
             self.end_time_label.config(
-                text=VideoUtils.format_time(self.video_length))
+                text=f"구간 종료: {VideoUtils.format_time(self.video_length)}")
             self.end_time = self.video_length
 
             # 비디오의 첫 프레임(0)으로 위치 설정
@@ -124,7 +134,7 @@ class VideoEditorApp:
         '''비디오 재생/일시정지 버튼 클릭 시 호출'''
         if not self.is_playing:
             self.is_playing = True
-            self.play_button.config(text="⏸")  # 일시정지 버튼으로 변경
+            self.play_button.config(text="⏸️")  # 일시정지 아이콘
             # 재생 중에도 구간 설정 버튼 활성
             self.set_start_button.config(state=tk.NORMAL)
             self.set_end_button.config(state=tk.NORMAL)
@@ -134,7 +144,7 @@ class VideoEditorApp:
             self.update_video()
         else:
             self.is_playing = False
-            self.play_button.config(text="▶")  # 재생 버튼으로 변경
+            self.play_button.config(text="▶️")  # 재생 아이콘
             # 일시정지 상태에서는 구간 설정 버튼 활성화
             self.set_start_button.config(state=tk.NORMAL)
             self.set_end_button.config(state=tk.NORMAL)
@@ -145,10 +155,14 @@ class VideoEditorApp:
     def stop_video(self):
         """비디오 중지 버튼 클릭시 호출"""
         self.is_playing = False
-        self.play_button.config(text="▶")
-        # 비디오를 처음으로 되돌리기 위해, 프레임을 0으로 지정
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        self.show_frame(0)
+        self.play_button.config(text="▶️")
+
+        # cap이 None이 아닌지 확인 후 처리
+        if self.cap is not None and self.cap.isOpened():
+            # 비디오를 처음으로 되돌리기 위해, 프레임을 0으로 지정
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self.show_frame(0)
+
         # 슬라이더 위치 초기화
         self.position_slider.set(0)
         self.position_label.config(text="00:00")
@@ -195,7 +209,7 @@ class VideoEditorApp:
 
     def update_video(self):
         """비디오 프레임 업데이트"""
-        if self.is_playing and self.cap is not None:
+        if self.is_playing and self.cap is not None and self.cap.isOpened():
             ret, frame = self.cap.read()
             if ret:
                 self.show_frame(frame)
@@ -213,7 +227,7 @@ class VideoEditorApp:
                 if current_time >= self.end_time and self.is_playing:
                     self.is_playing = False
                     self.is_previewing = False
-                    self.play_button.config(text="▶")
+                    self.play_button.config(text="▶️")
                     return
 
                 # 다음 프레임 예약
@@ -223,9 +237,9 @@ class VideoEditorApp:
             else:
                 # 비디오 끝에 다다르면 재생 중지
                 self.is_playing = False
-                self.play_button.config(text="▶")
+                self.play_button.config(text="▶️")
                 # 구간 미리보기가 아닐경우, 처음으로 되돌리기
-                if not self.is_previewing:
+                if not hasattr(self, 'is_previewing') or not self.is_previewing:
                     self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     self.show_frame(0)
 
@@ -234,7 +248,7 @@ class VideoEditorApp:
         value = self.position_slider.get()
         self.start_time = float(value)
         self.start_time_label.config(
-            text=f"선택구간 시작: {VideoUtils.format_time(int(self.start_time))}")
+            text=f"구간 시작: {VideoUtils.format_time(int(self.start_time))}")
 
         # 구간 저장 버튼 상태 업데이트
         self._update_save_button_state()
@@ -243,8 +257,10 @@ class VideoEditorApp:
         '''종료 시간 지정 '''
         value = self.position_slider.get()
         self.end_time = float(value)
+        self.start_time_label.config(
+            text=f"구간 시작: {VideoUtils.format_time(int(self.start_time))}")
         self.end_time_label.config(
-            text=f"선택구간 종료: {VideoUtils.format_time(int(self.end_time))}")
+            text=f"구간 종료: {VideoUtils.format_time(int(self.end_time))}")
 
         # 구간 저장 버튼 상태 업데이트
         self._update_save_button_state()
@@ -373,7 +389,7 @@ class VideoEditorApp:
 
     def play_selection(self):
         """선택 구간만 재생"""
-        if not self.cap or self.fps is None:
+        if not self.cap or not self.cap.isOpened() or self.fps is None:
             return
 
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, int(self.start_time * self.fps))
@@ -392,7 +408,7 @@ class VideoEditorApp:
             self.root.update()
             self.root.after(int(1000 / self.fps))
         self.is_playing = False
-        self.play_button.config(text="▶")
+        self.play_button.config(text="▶️")
 
     def get_saved_segments(self):
         """저장된 구간 목록 반환"""

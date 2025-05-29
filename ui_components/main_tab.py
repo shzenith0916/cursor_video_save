@@ -1,6 +1,8 @@
 import tkinter as tk
-from tkinter import ttk
+import ttkbootstrap as ttk  # ttkbootstrap으로 변경
+from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
 from .base_tab import BaseTab
+from utils.styles import AppStyles
 
 
 class MainTab(BaseTab):
@@ -44,9 +46,8 @@ class MainTab(BaseTab):
         self._save_widget_references()
 
     def create_top_frame(self):
-        "상단 프레임 생성 - 파일 선택 (까만색 테두리)"
-        self.top_frame = tk.Frame(
-            self.frame, highlightbackground="black", highlightthickness=1)
+        "상단 프레임 생성 - 파일 선택"
+        self.top_frame = tk.Frame(self.frame)
         self.top_frame.pack(pady=20, padx=20, fill=tk.X)
         # 자식 위젯 크기에 따라 부모가 수축하지 않도록 막는 설정
         self.top_frame.pack_propagate(False)
@@ -56,8 +57,7 @@ class MainTab(BaseTab):
         self.top_frame.columnconfigure(0, weight=1)
 
         # openfile 프레임 (왼쪽으로 이동)
-        self.openfile_frame = tk.Frame(self.top_frame, highlightbackground="blue",
-                                       highlightthickness=1)
+        self.openfile_frame = tk.Frame(self.top_frame)
         self.openfile_frame.grid(
             row=0, column=0, padx=(15, 0), sticky="w")  # grid에서 column 0, sticky="w"로 왼쪽 붙이기
 
@@ -76,15 +76,14 @@ class MainTab(BaseTab):
         self.videofile_entry.grid(row=0, column=1, padx=(0, 5), sticky="we")
 
         # 비디오 선택 버튼 생성
-        self.video_select_button = tk.Button(
-            self.openfile_frame, text="파일 선택", command=self.app.open_file)
+        self.video_select_button = ttk.Button(
+            self.openfile_frame, text="파일 선택", bootstyle=PRIMARY, command=self.app.open_file)
         self.video_select_button.grid(row=0, column=2, padx=(0, 5))
 
         # info 프레임 (오른쪽으로 이동)
-        self.info_frame = tk.Frame(self.top_frame, highlightbackground="orange",
-                                   highlightthickness=1)
+        self.info_frame = tk.Frame(self.top_frame)
         self.info_frame.grid(row=0, column=1, padx=10,
-                             pady=10, sticky="e")  # grid에서 column 1, sticky="e"로 오른쪽 붙이기
+                             pady=10, sticky="w")  # grid에서 column 1, sticky="w"로 왼왼쪽 붙이기
 
         # 비디오 정보를 인포 프레임에 추가
         self.video_info_label = tk.Label(
@@ -95,8 +94,8 @@ class MainTab(BaseTab):
         """중간 프레임 생성 - 파일 선택 (빨간색 테두리)
             비디오 로딩 안할때 백그라운드 컬러는 black"""
         # 비디오 프레임
-        self.video_frame = tk.Frame(self.frame, bg="black", width=640, height=360,
-                                    highlightbackground="red", highlightthickness=1)
+        self.video_frame = tk.Frame(
+            self.frame, bg="black", width=640, height=360)
         self.video_frame.pack(fill='both', expand=True, padx=10, pady=10)
         self.video_frame.pack_propagate(False)
 
@@ -105,123 +104,120 @@ class MainTab(BaseTab):
         self.video_label.pack(expand=True)
 
     def create_control_frame(self):
-        """슬라이더랑 구간선택 담을 컨트롤 기능의 컨테이너 프레임 (초록색 테두리)"""
-        self.container_frame = tk.Frame(
-            self.frame, highlightbackground="green", highlightthickness=1)
+        """슬라이더, 구간 설정, 저장/미리보기 버튼을 담는 메인 컨트롤 프레임"""
+        self.container_frame = tk.Frame(self.frame)
         self.container_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        # 슬라이더 섹션 생성, 여기에 안넣으면 creat_ui에 들어가 있어야 합니다.
-        self.create_slider_section()
-        # 편집 섹션 생성, 하지만 슬라이더와 편집 섹션이 control frame에 종속되기에 여기에서 명시해야합니다.
-        self.create_edit_section()
+        # Grid 컬럼 가중치 설정 (예: slider 40%, interval 30%, save 30%)
+        self.container_frame.columnconfigure(0, weight=4)  # slider_frame
+        self.container_frame.columnconfigure(1, weight=3)  # interval_frame
+        self.container_frame.columnconfigure(2, weight=3)  # save_frame
+
+        # 1. 좌측: 슬라이더 및 재생/정지 버튼 프레임
+        self.slider_frame = tk.Frame(self.container_frame)
+        self.slider_frame.grid(
+            row=0, column=0, padx=(0, 5), pady=5, sticky="nsew")
+        self.create_slider_section()  # 슬라이더와 재생/정지 버튼 생성 및 배치
+
+        # 2. 중앙: 구간 시작/종료 설정 프레임
+        self.interval_frame = tk.Frame(self.container_frame)
+        self.interval_frame.grid(
+            row=0, column=1, padx=5, pady=5, sticky="nsew")
+        self.create_interval_section()  # 구간 설정 위젯 생성 및 배치 (이전 create_edit_section)
+
+        # 3. 우측: 구간 저장 및 미리보기 버튼 프레임
+        # save_frame -> save_action_frame으로 이름 변경 고려
+        self.save_action_frame = tk.Frame(self.container_frame)
+        self.save_action_frame.grid(
+            row=0, column=2, padx=(5, 0), pady=5, sticky="nsew")
+        self.create_save_action_section()  # 저장/미리보기 버튼 생성 및 배치
 
     def create_slider_section(self):
-        """슬라이더 섹션 생성"""
-        # 슬라이더 프레임 (주황색 테두리)
-        self.slider_frame = tk.Frame(
-            self.container_frame, highlightbackground="orange", highlightthickness=1)
-        self.slider_frame.pack(side=tk.LEFT, padx=10, pady=10,
-                               fill=tk.X, expand=True)
-
+        """슬라이더 섹션 생성 (slider_frame 내에 배치)"""
         # 비디오 전체구간 슬라이더 생성
         self.position_slider = ttk.Scale(self.slider_frame,
                                          orient='horizontal',
                                          command=self.app.select_position,
                                          from_=0,
                                          to=100,
-                                         length=500,
-                                         style='Horizontal.TScale')  # 스타일 추가
+                                         length=450,  # 길이 약간 줄임
+                                         style='Horizontal.TScale')
+        self.position_slider.pack(fill=tk.X, padx=3, pady=5, expand=True)
 
-        # 슬라이더 스타일 설정
-        style = ttk.Style()
-        style.configure('Horizontal.TScale',
-                        background='white',
-                        troughcolor='lightgray',
-                        sliderthickness=10)  # 슬라이더 두께 증가
-
-        self.position_slider.pack(fill=tk.X, padx=3, pady=5)
-
-        # # 슬라이더 이벤트 바인딩 추가
-        # self.position_slider.bind(
-        #     '<Button-1>', lambda e: self.app.select_position(float(self.position_slider.get())))  # <Button-1>마우스 왼쪽 버튼 누를때
-        # self.position_slider.bind(
-        #     '<B1-Motion>', lambda e: self.app.select_position(float(self.position_slider.get())))  # <B1-Motion>마우스 왼쪽 버튼을 누르면서 움직일때
-
-        # 현재 위치 시간
         self.position_label = tk.Label(self.slider_frame, text="00:00")
         self.position_label.pack(pady=3)
 
-        # 디버깅 출력
-        print(f"position_label created: {self.position_label}")
-
-        self.create_button_section()
+        self.create_button_section()  # 재생/정지 버튼은 slider_frame 소속
 
     def create_button_section(self):
-        """재생 컨트롤 버튼들을 담을 프레임 (파란 테두리)"""
-        self.control_frame = tk.Frame(
-            self.slider_frame, highlightbackground="blue", highlightthickness=1)
-        self.control_frame.pack(pady=3)
+        """재생 컨트롤 버튼들을 slider_frame 내에 생성"""
+        control_buttons_subframe = tk.Frame(
+            self.slider_frame)  # 버튼들을 담을 내부 프레임
+        control_buttons_subframe.pack(pady=8)
 
-        self.play_button = tk.Button(self.control_frame, text="▶",
-                                     command=self.app.toggle_play)
-        self.play_button.pack(side=tk.LEFT)
+        self.play_button = ttk.Button(control_buttons_subframe, text="재생 ▶",
+                                      bootstyle=(SUCCESS, OUTLINE), command=self.app.toggle_play)
+        self.play_button.pack(side=tk.LEFT, padx=8, pady=2)
 
-        self.stop_button = tk.Button(self.control_frame, text="⏹",
-                                     command=self.app.stop_video)
-        self.stop_button.pack(side=tk.LEFT)
+        self.stop_button = ttk.Button(control_buttons_subframe, text="정지 ⏹",
+                                      bootstyle=(DANGER, OUTLINE), command=self.app.stop_video)
+        self.stop_button.pack(side=tk.LEFT, padx=8, pady=2)
 
-    def create_edit_section(self):
-        """선택 구간 섹션 생성"""
-        # 편집 내용 프레임 (보라색 테두리)
-        self.edit_frame = tk.Frame(
-            self.container_frame, highlightbackground="purple", highlightthickness=1)
-        self.edit_frame.pack(side=tk.LEFT, padx=10, pady=10)
-
-        self.create_interval()
-        self.create_preview_button()
-
-    def create_interval(self):
-        """구간의 시작 시간, 끝 시간 설정 섹션 생성"""
-        # 시작 시간 관련 위젯들들
-        self.start_frame = tk.Frame(self.edit_frame)
-        self.start_frame.pack(side=tk.TOP, pady=3)
+    def create_interval_section(self):  # <- create_edit_section 에서 이름 변경
+        """구간의 시작 시간, 끝 시간 설정 섹션 (interval_frame 내에 배치)"""
+        # 시작 시간 관련 위젯들
+        self.start_frame = tk.Frame(self.interval_frame)
+        self.start_frame.pack(side=tk.TOP, pady=3, anchor="w")  # anchor 추가
         self.start_time_label = tk.Label(
-            self.start_frame, text="선택구간 시작: 00:00")
-        self.start_time_label.pack(side=tk.LEFT)
-        self.set_start_button = tk.Button(self.start_frame, text="시작 지점 설정",
-                                          command=self.app.set_start_time, state=tk.DISABLED)
-        self.set_start_button.pack(side=tk.LEFT, padx=5)
+            self.start_frame, text="구간 시작: 00:00", fg='blue')
+        self.start_time_label.pack(side=tk.LEFT, padx=(0, 5))
+        self.set_start_button = ttk.Button(self.start_frame,
+                                           text="시작 지점 설정",
+                                           style='PastelGreenOutline.TButton',
+                                           command=self.app.set_start_time,
+                                           state=tk.DISABLED)
+        self.set_start_button.pack(side=tk.LEFT)
 
         # 종료 시간 관련 위젯들
-        self.end_frame = tk.Frame(self.edit_frame)
-        self.end_frame.pack(side=tk.TOP, pady=3)
-        self.end_time_label = tk.Label(self.end_frame, text="선택구간 종료: 00:00")
-        self.end_time_label.pack(side=tk.LEFT)
-        self.set_end_button = tk.Button(self.end_frame, text="종료 지점 설정",
-                                        command=self.app.set_end_time, state=tk.DISABLED)
-        self.set_end_button.pack(side=tk.LEFT, padx=5)
+        self.end_frame = tk.Frame(self.interval_frame)
+        self.end_frame.pack(side=tk.TOP, pady=3, anchor="w")  # anchor 추가
+        self.end_time_label = tk.Label(
+            self.end_frame, text="구간 종료: 00:00", fg='blue')
+        self.end_time_label.pack(side=tk.LEFT, padx=(0, 5))
+        self.set_end_button = ttk.Button(self.end_frame,
+                                         text="종료 지점 설정",
+                                         style='PastelGreenOutline.TButton',
+                                         command=self.app.set_end_time,
+                                         state=tk.DISABLED)
+        self.set_end_button.pack(side=tk.LEFT)
 
-        # 구간 저장 버튼 추가
-        self.save_frame = tk.Frame(self.edit_frame)
-        self.save_frame.pack(side=tk.TOP, pady=6)
-        self.save_segment_button = tk.Button(
-            self.save_frame,
+        # 도움말 레이블 (옵션)
+        help_label = tk.Label(self.interval_frame,
+                              text="💡 구간 설정 후 저장/미리보기가 가능합니다.",
+                              font=("Arial", 9),
+                              fg='gray')
+        help_label.pack(side=tk.TOP, pady=10, anchor="w")
+
+    # <- create_save_button 및 create_preview_button 통합
+    def create_save_action_section(self):
+        """구간 저장 및 미리보기 버튼 (save_action_frame 내에 배치)"""
+        self.save_segment_button = ttk.Button(
+            self.save_action_frame,
             text="💾 구간 저장",
+            style='PastelGreen.TButton',
             command=self.app.save_current_segment,
-            font=("Arial", 10, "bold"),
-            bg="#4CAF50",
-            fg="white",
-            relief="raised",
-            bd=2,
             state=tk.DISABLED
         )
-        self.save_segment_button.pack(pady=2)
+        self.save_segment_button.pack(
+            pady=(10, 5), padx=5, fill=tk.X, expand=True)
 
-    def create_preview_button(self):
-        """선택구간 미리보기 버튼 생성"""
-        self.preview_button = tk.Button(
-            self.edit_frame, text="선택구간 미리보기", command=lambda: self.app.preview_selection())
-        self.preview_button.pack(side=tk.TOP, pady=3)
+        self.preview_button = ttk.Button(
+            self.save_action_frame,
+            text="🎬 선택구간 미리보기",
+            style='PastelGreenOutline.TButton',
+            command=lambda: self.app.preview_selection()
+        )
+        self.preview_button.pack(pady=5, padx=5, fill=tk.X, expand=True)
 
     def _save_widget_references(self):
         """앱에 위젯 참조 저장"""
