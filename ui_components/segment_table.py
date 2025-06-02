@@ -5,9 +5,10 @@ from utils.utils import VideoUtils
 
 
 class SegmentTable:
-    def __init__(self, root, app, selection_callback=None):
+    def __init__(self, root, app, selection_callback=None, preview_window=None):
         self.root = root
         self.app = app
+        self.preview_window = preview_window  # PreviewWindow 직접 참조
         # NewTab의 on_segment_selected 메서드가 저장됨
         self.selection_callback = selection_callback
         self.entry_edit = None
@@ -307,17 +308,32 @@ class SegmentTable:
                     opinion2))
 
     def delete_selected_segment(self):
-        """선택된 구간 삭제"""
+        """선택한 구간 삭제"""
         selected_items = self.table.selection()
         if not selected_items:
             messagebox.showwarning("경고", "삭제할 항목을 선택해주세요.")
             return
 
-        if messagebox.askyesno("확인", "선택한 구간을 삭제하시겠습니까?"):
-            index = self.table.index(selected_items[0])
-            if hasattr(self.app, 'saved_segments') and index < len(self.app.saved_segments):
-                del self.app.saved_segments[index]
-                self.load_table_data()
+        if messagebox.askyesno("확인", "선택한 구간을 정말 삭제하시겠습니까?"):
+            # 여러 항목을 선택한 경우 (현재는 단일 선택만 지원)
+            for item in selected_items:
+                index = self.table.index(item)
+                if hasattr(self.app, 'saved_segments') and self.app.saved_segments and index < len(self.app.saved_segments):
+                    del self.app.saved_segments[index]
+
+            self.refresh()
+            messagebox.showinfo("성공", "선택한 구간이 삭제되었습니다.")
+
+            # 미리보기 창에서 삭제한 경우, 미리보기 창으로 포커스 복원
+            if self.preview_window and hasattr(self.preview_window, 'window'):
+                try:
+                    self.preview_window.window.focus_force()
+                except tk.TclError:
+                    pass  # 창이 이미 닫힌 경우 무시
+
+            # 삭제 후 NewTab의 테이블도 업데이트
+            if hasattr(self.app, 'new_tab_instance') and hasattr(self.app.new_tab_instance, 'refresh_table'):
+                self.app.new_tab_instance.refresh_table()
 
     def export_to_csv(self):
         """CSV 내보내기"""

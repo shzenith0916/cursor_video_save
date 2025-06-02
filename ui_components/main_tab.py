@@ -85,9 +85,19 @@ class MainTab(BaseTab):
         self.info_frame.grid(row=0, column=1, padx=10,
                              pady=10, sticky="w")  # grid에서 column 1, sticky="w"로 왼왼쪽 붙이기
 
+        # 섹션 타이틀
+        self.section_title_label = tk.Label(
+            self.info_frame, text="비디오정보", font=("Arial", 12, "bold"))
+        self.section_title_label.pack(
+            pady=(0, 2), anchor="w")  # 상단 패딩 약간, 왼쪽 정렬
+
+        # 구분선
+        self.separator = ttk.Separator(self.info_frame, orient=tk.HORIZONTAL)
+        self.separator.pack(fill=tk.X, pady=(0, 5), expand=True)  # 위아래 패딩 추가
+
         # 비디오 정보를 인포 프레임에 추가
         self.video_info_label = tk.Label(
-            self.info_frame, text="", font=("Arial", 10), fg="gray", anchor="e", justify="right")
+            self.info_frame, text="", font=("Arial", 10), fg="gray", anchor="w", justify="left")
         self.video_info_label.pack(fill=tk.X, expand=True, padx=5, pady=5)
 
     def create_video_frame(self):

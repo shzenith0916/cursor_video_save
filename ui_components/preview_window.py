@@ -80,6 +80,14 @@ class PreviewWindow:
         self.main_frame = tk.Frame(self.window)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
+        # 스타일 설정
+        style = ttk.Style()
+        style.configure("SavePreview.TButton", font=("Arial", 12, "bold"),
+                        background="#007bff", foreground="white", padding=(10, 5))  # 예시: 파란색 배경, 흰색 글씨
+        style.map("SavePreview.TButton",
+                  background=[('active', '#0056b3')],  # 활성화 시 약간 어둡게
+                  foreground=[('active', 'white')])
+
         self.video_frame = tk.Frame(self.main_frame, bg="black", width=600)
         self.video_frame.pack(side="left", fill=tk.BOTH, expand=False)
         self.video_frame.pack_propagate(False)  # 크기 고정
@@ -95,7 +103,8 @@ class PreviewWindow:
         self.right_frame.pack_propagate(False)  # 최소 너비 유지
 
         # SegmentTable 컴포넌트 사용
-        self.segment_table = SegmentTable(self.right_frame, self.app)
+        self.segment_table = SegmentTable(
+            self.right_frame, self.app, preview_window=self)  # preview window 추가
 
         # 컨트롤 플레임
         self.video_control_frame = tk.Frame(self.window)
@@ -142,10 +151,11 @@ class PreviewWindow:
         self.save_button = ttk.Button(
             self.control_right,
             text="💾 구간 저장",
-            bootstyle=SUCCESS,
+            style="SavePreview.TButton",  # 커스텀 스타일 적용
             command=self.save_selection
         )
-        self.save_button.pack(side=tk.LEFT, padx=10)
+        # ipady 추가로 버튼 세로 크기 증가
+        self.save_button.pack(side=tk.LEFT, padx=10, ipady=5)
 
         # ✅ 추가!! 도움말 레이블
         help_label = tk.Label(self.control_right,

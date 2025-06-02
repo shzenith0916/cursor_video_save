@@ -30,6 +30,9 @@ class NewTab(BaseTab):
         self.current_segment = None
         self.extract_config = ExtractConfig()
 
+        # 취소 이벤트 (백그라운드 작업 중단용)
+        self.cancel_event = threading.Event()
+
         # 성능 최적화 관련 속성
         self.target_fps = 30
         self.frame_skip = 1
@@ -219,14 +222,13 @@ class NewTab(BaseTab):
             padding=(10, 8)
         )
 
-        # 이미지 추출 버튼 (미래 기능)
+        # 이미지 추출 버튼
         ttk.Button(
             button_frame,
             text="이미지 추출",
             command=self.extract_images,
             width=16,
-            style="Disabled.TButton",
-            state="disabled"
+            style="Modern.TButton"
         ).pack(side=tk.RIGHT, padx=6, pady=4)
 
         # 비디오 추출 버튼
@@ -382,6 +384,9 @@ class NewTab(BaseTab):
     def extract_selected_segment(self):
         """선택된 구간 추출"""
         try:
+            # 취소 이벤트 초기화 (새 작업 시작)
+            self.cancel_event.clear()
+
             # 1. 선택 확인
             selected_items = self.segment_table.table.selection()
             if not selected_items:
@@ -426,7 +431,7 @@ class NewTab(BaseTab):
                 return
 
             # 5. 추출 시작
-            print(f"🎬 추출 시작: {segment_info['start']}~{segment_info['end']}초")
+            print(f"비디오 추출 시작: {segment_info['start']}~{segment_info['end']}초")
             self.progress_bar['value'] = 0
 
             threading.Thread(
@@ -465,14 +470,31 @@ class NewTab(BaseTab):
     def _do_extraction(self, input_path, output_path, segment_info):
         """실제 추출 작업 (백그라운드)"""
         try:
+            # 취소 이벤트 초기화
+            self.cancel_event.clear()
+
+            # 취소 확인
+            if self.cancel_event.is_set():
+                self.root.after(
+                    0, lambda: self.update_progress(0, "취소됨", "취소"))
+                return
+
             # 진행률 콜백 (개선된 버전)
             def update_progress_callback(msg):
+                if self.cancel_event.is_set():
+                    return  # 취소된 경우 진행률 업데이트 중단
                 self.root.after(
                     0, lambda: self.update_progress(50, f"🔄 {msg}", "⚙️"))
 
             # 시작 상태
             self.root.after(
-                0, lambda: self.update_progress(0, "🚀 추출 시작...", "🚀"))
+                0, lambda: self.update_progress(0, "추출 시작...", "시작..."))
+
+            # 취소 확인
+            if self.cancel_event.is_set():
+                self.root.after(
+                    0, lambda: self.update_progress(0, "취소됨", "취소"))
+                return
 
             # VideoExtractor로 추출
             result = VideoExtractor.extract_segment(
@@ -484,15 +506,21 @@ class NewTab(BaseTab):
                 ffmpeg_codec_copy=self.extract_config.use_codec_copy
             )
 
+            # 취소 확인
+            if self.cancel_event.is_set():
+                self.root.after(
+                    0, lambda: self.update_progress(0, "취소됨", "취소"))
+                return
+
             # 결과 표시
             def show_result():
                 if result['success']:
-                    self.update_progress(100, "✅ 추출 완료!", "🎉")
+                    self.update_progress(100, "추출 완료!", "✅")
                     messagebox.showinfo(
                         "✅ 완료", f"추출 성공!\n저장 위치: {result['output_path']}")
                 else:
-                    self.update_progress(0, "❌ 추출 실패", "💥")
-                    messagebox.showerror("❌ 실패", f"추출 실패: {result['message']}")
+                    self.update_progress(0, " 추출 실패", "❌")
+                    messagebox.showerror("실패", f"추출 실패: {result['message']}")
 
                 # 5초 후 진행률 바 초기화
                 self.root.after(
@@ -502,20 +530,180 @@ class NewTab(BaseTab):
 
         except Exception as e:
             def show_error():
-                self.update_progress(0, "💥 오류 발생", "💥")
+                self.update_progress(0, "오류 발생", "⚠️")
                 messagebox.showerror("오류", f"추출 중 오류: {str(e)}")
 
             self.root.after(0, show_error)
 
     def cancel_extraction(self):
         """추출 취소"""
-        self.update_progress(0, "🛑 취소됨", "🛑")
-        print("❌ 추출 취소됨")
+        self.cancel_event.set()  # 취소 신호 전송
+        self.update_progress(0, "취소됨", "취소")
+        print("❌ 추출 취소 신호 전송됨")
 
     def extract_images(self):
-        """이미지 추출 (미래 구현 예정)"""
-        messagebox.showinfo("알림", "이미지 추출 기능은 곧 구현될 예정입니다! 🚧")
-        # TODO: 나중에 구현
-        # 1. 선택된 구간에서 프레임들 추출
-        # 2. 이미지 파일로 저장
-        # 3. 미리보기 영역에 표시
+        """선택된 구간에서 이미지 추출 (FPS 기반 스킵)"""
+        try:
+            # 취소 이벤트 초기화 (새 작업 시작)
+            self.cancel_event.clear()
+
+            # 1. 선택 확인
+            selected_items = self.segment_table.table.selection()
+            if not selected_items:
+                messagebox.showwarning("경고", "이미지를 추출할 구간을 선택해주세요.")
+                return
+
+            # 2. 구간 정보 가져오기
+            index = self.segment_table.table.index(selected_items[0])
+            if index >= len(self.app.saved_segments):
+                messagebox.showerror("오류", "구간 정보를 찾을 수 없습니다.")
+                return
+
+            segment_info = self.app.saved_segments[index]
+
+            # 3. 입력 파일 찾기
+            filename = segment_info['file']
+            input_path = None
+
+            if os.path.isabs(filename) and os.path.exists(filename):
+                input_path = filename
+            elif hasattr(self.app, 'video_path') and self.app.video_path:
+                full_path = self.app.video_path.get() if hasattr(
+                    self.app.video_path, 'get') else self.app.video_path
+                if full_path and os.path.basename(full_path) == filename and os.path.exists(full_path):
+                    input_path = full_path
+
+            if not input_path:
+                messagebox.showerror("오류", "원본 비디오 파일을 찾을 수 없습니다.")
+                return
+
+            # 4. 출력 폴더 선택
+            output_folder = filedialog.askdirectory(
+                title="선택 구간의 추출된 이미지 저장할 폴더 선택"
+            )
+            if not output_folder:
+                return
+
+            # 5. 이미지 추출 시작
+            print(
+                f"이미지 추출 시작: {segment_info['start']}~{segment_info['end']}초")
+            self.update_progress(0, "이미지 추출 중...", "..in progress")
+
+            threading.Thread(
+                target=self._do_image_extraction,
+                args=(input_path, output_folder, segment_info),
+                daemon=True
+            ).start()
+
+        except Exception as e:
+            messagebox.showerror("오류", f"이미지 추출 준비 중 오류: {str(e)}")
+
+    def _do_image_extraction(self, input_path, output_folder, segment_info):
+        """실제 이미지 추출 작업 (백그라운드)"""
+        try:
+            import cv2
+            from datetime import datetime
+
+            # 취소 이벤트 초기화
+            self.cancel_event.clear()
+
+            # 취소 확인
+            if self.cancel_event.is_set():
+                self.root.after(
+                    0, lambda: self.update_progress(0, "취소됨", "추출 취소"))
+                return
+
+            # 비디오 캡처 초기화
+            cap = cv2.VideoCapture(input_path)
+            if not cap.isOpened():
+                raise Exception("비디오 파일을 열 수 없습니다.")
+
+            # 비디오 정보 가져오기
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+            # FPS에 따른 프레임 스킵 계산
+            frame_skip = 2 if fps >= 30 else 1  # 30fps 이상이면 매 2번째 프레임만
+            print(f"비디오 FPS: {fps:.2f}, 프레임 스킵: {frame_skip}")
+
+            # 시작/끝 프레임 계산
+            start_frame = int(segment_info['start'] * fps)
+            end_frame = int(segment_info['end'] * fps)
+
+            # 추출할 프레임 목록 생성 (스킵 적용)
+            frames_to_extract = list(range(start_frame, end_frame, frame_skip))
+            total_extract_frames = len(frames_to_extract)
+
+            print(f"추출할 프레임: {total_extract_frames}개 (스킵: {frame_skip})")
+
+            # 파일명 prefix 생성
+            base_filename = os.path.splitext(os.path.basename(input_path))[0]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            extracted_count = 0
+
+            for i, frame_num in enumerate(frames_to_extract):
+                # 취소 확인 (매 프레임마다)
+                if self.cancel_event.is_set():
+                    cap.release()
+                    self.root.after(
+                        0, lambda: self.update_progress(0, "이미지 추출 취소됨", "추출 취소"))
+                    return
+
+                # 프레임 위치로 이동
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                ret, frame = cap.read()
+
+                if not ret:
+                    print(f"⚠️ 프레임 {frame_num} 읽기 실패")
+                    continue
+
+                # 시간 계산 (초)
+                time_sec = frame_num / fps
+                time_str = f"{int(time_sec//60):02d}m{int(time_sec%60):02d}s"
+
+                # 파일명 생성
+                image_filename = f"{base_filename}_{timestamp}_frame{frame_num:06d}_{time_str}.jpg"
+                image_path = os.path.join(output_folder, image_filename)
+
+                # 이미지 저장
+                cv2.imwrite(image_path, frame)
+                extracted_count += 1
+
+                # 진행률 업데이트
+                progress = (i + 1) / total_extract_frames * 100
+                self.root.after(0, lambda p=progress: self.update_progress(
+                    p, f"이미지 {extracted_count}/{total_extract_frames} 저장 중...", "saving..."))
+
+            cap.release()
+
+            # 취소 확인 (완료 직전)
+            if self.cancel_event.is_set():
+                self.root.after(
+                    0, lambda: self.update_progress(0, "이미지 추출 취소됨", "추출 취소"))
+                return
+
+            # 완료 메시지
+            def show_result():
+                self.update_progress(
+                    100, f"{extracted_count}개 이미지 추출 완료!", "✅")
+                messagebox.showinfo(
+                    "✅ 완료",
+                    f"이미지 추출 완료!\n"
+                    f"추출된 이미지: {extracted_count}개\n"
+                    f"저장 위치: {output_folder}\n"
+                    f"프레임 스킵: {frame_skip} (FPS: {fps:.1f})"
+                )
+
+                # 5초 후 진행률 바 초기화
+                self.root.after(
+                    5000, lambda: self.update_progress(0, "대기 중...", "⚡"))
+
+            self.root.after(0, show_result)
+
+        except Exception as e:
+            def show_error():
+                self.update_progress(0, "💥 이미지 추출 실패", "💥")
+                messagebox.showerror("오류", f"이미지 추출 중 오류: {str(e)}")
+
+            self.root.after(0, show_error)
