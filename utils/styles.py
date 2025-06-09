@@ -5,186 +5,122 @@ from ttkbootstrap.constants import *
 class AppStyles:
     @staticmethod
     def configure_styles(style):
-        """앱 전체에서 사용할 공통 스타일 설정"""
+        """앱 전체에서 사용할 공통 스타일 설정 - 파스텔 그린 테마"""
 
-        # 기본 버튼 스타일 (틸 그린)
-        style.configure('App.TButton',
-                        font=('Arial', 11, 'bold'),
-                        foreground='white',
-                        background='#26A69A',  # 틸 그린
-                        borderwidth=0,
-                        focuscolor='none',
-                        relief='flat',
-                        padding=(15, 8))
+        # 컬러 팔레트 가져오기
+        colors = AppStyles.get_pastel_colors()
 
-        style.map('App.TButton',
-                  background=[('active', '#00796B'),
-                              ('pressed', '#004D40'),
-                              ('disabled', '#B8B8B8')])
-
-        # 저장/추출 버튼 스타일 (밝은 틸)
-        style.configure('Success.TButton',
-                        font=('Arial', 11, 'bold'),
-                        foreground='white',
-                        background='#4DB6AC',  # 밝은 틸
-                        borderwidth=0,
-                        focuscolor='none',
-                        relief='flat',
-                        padding=(15, 8))
-
-        style.map('Success.TButton',
-                  background=[('active', '#26A69A'),
-                              ('pressed', '#00796B'),
-                              ('disabled', '#B8B8B8')])
-
-        # 삭제 버튼 스타일 (진한 틸)
+        # 삭제 버튼 스타일 (진한 파스텔 그린)
         style.configure('Danger.TButton',
                         font=('Arial', 11, 'bold'),
                         foreground='white',
-                        background='#00695C',  # 진한 틸
+                        background=colors['outline'],  # #52C7B8
                         borderwidth=0,
                         focuscolor='none',
                         relief='flat',
                         padding=(15, 8))
 
         style.map('Danger.TButton',
-                  background=[('active', '#004D40'),
-                              ('pressed', '#00363A'),
+                  background=[('active', colors['pressed']),    # #6BC4B0
+                              ('pressed', colors['text_dark']),  # 2E5A4F
                               ('disabled', '#B8B8B8')])
 
-        # 미리보기 버튼 스타일 (터키즈)
-        style.configure('Preview.TButton',
+        # 큰 버튼 스타일 (중요한 액션용 - 선명한 파스텔 그린)
+        style.configure('Large.TButton',
                         font=('Arial', 12, 'bold'),
                         foreground='white',
-                        background='#80CBC4',  # 터키즈
+                        background=colors['pressed'],  # #6BC4B0
                         borderwidth=0,
                         focuscolor='none',
                         relief='flat',
                         padding=(20, 10))
 
-        style.map('Preview.TButton',
-                  background=[('active', '#4DB6AC'),
-                              ('pressed', '#26A69A'),
-                              ('disabled', '#B8B8B8')])
-
-        # 큰 버튼 스타일 (중요한 액션용 - 밝은 시안)
-        style.configure('Large.TButton',
-                        font=('Arial', 14, 'bold'),
-                        foreground='white',
-                        background='#00BCD4',  # 시안
-                        borderwidth=0,
-                        focuscolor='none',
-                        relief='flat',
-                        padding=(25, 12))
-
         style.map('Large.TButton',
-                  background=[('active', '#0097A7'),
-                              ('pressed', '#006064'),
+                  background=[('active', colors['primary']),   # #7DD3C0
+                              ('pressed', colors['outline']),  # #52C7B8
                               ('disabled', '#B8B8B8')])
 
-        # 작은 컨트롤 버튼 스타일 (재생/정지 등 - 원형 모던 스타일)
+        # 작은 컨트롤 버튼 스타일 (재생/정지 등 - 차분한 그린)
         style.configure('Control.TButton',
-                        font=('Arial', 14, 'bold'),
+                        font=('Arial', 12, 'bold'),
                         foreground='white',
-                        background='#37474F',  # 진한 회색
+                        background=colors['text_medium'],  # #4A7C69
                         borderwidth=0,
                         focuscolor='none',
                         relief='flat',
-                        padding=(12, 12))  # 정사각형에 가까운 패딩
+                        padding=(12, 12))
 
         style.map('Control.TButton',
-                  background=[('active', '#455A64'),
-                              ('pressed', '#263238'),
+                  background=[('active', colors['forest_hover']),  # #3A6B5F
+                              ('pressed', colors['text_dark']),    # #2E5A4F
                               ('disabled', '#B8B8B8')])
 
-        # 큰 컨트롤 버튼 스타일 (중요한 재생 버튼용)
-        style.configure('PlayControl.TButton',
-                        font=('Arial', 16, 'bold'),
-                        foreground='white',
-                        background='#2E7D32',  # 진한 녹색
-                        borderwidth=0,
-                        focuscolor='none',
-                        relief='flat',
-                        padding=(16, 16))
-
-        style.map('PlayControl.TButton',
-                  background=[('active', '#388E3C'),
-                              ('pressed', '#1B5E20'),
-                              ('disabled', '#B8B8B8')])
-
-        # ✨ 새로 추가: 파스텔 초록색 스타일들 (ttkbootstrap 호환)
-
-        # 파스텔 민트 그린 (메인 저장 버튼용)
-        style.configure('PastelGreen.TButton',
-                        font=('Arial', 20, 'bold'),
-                        foreground='white',
-                        background='red',
-                        borderwidth=0,
-                        focuscolor='none',
-                        relief='flat',
-                        padding=(30, 20))
-
-        style.map('PastelGreen.TButton',
-                  background=[('active', '#7DDCC9'),
-                              ('pressed', '#6BC4B0'),
-                              ('disabled', '#B8B8B8')])
+        # ===== 파스텔 스타일들 =====
 
         # 파스텔 초록 아웃라인 (서브 버튼용)
         style.configure('PastelGreenOutline.TButton',
                         font=('Arial', 11, 'bold'),
-                        foreground='#6BC4B0',
+                        foreground=colors['outline'],  # #52C7B8
                         background='white',
                         borderwidth=2,
-                        bordercolor='#98E4D6',
+                        bordercolor=colors['large'],   # #A8E6CF
                         focuscolor='none',
                         relief='solid',
                         padding=(15, 8))
 
         style.map('PastelGreenOutline.TButton',
-                  background=[('active', '#F0FDF4'),
-                              ('pressed', '#E6F7ED')],
-                  foreground=[('active', '#5BB3A0'),
-                              ('pressed', '#4A9B89')])
+                  background=[('active', colors['soft']),      # #E8F5F3
+                              ('pressed', colors['soft'])],
+                  foreground=[('active', colors['pressed']),   # #6BC4B0
+                              ('pressed', colors['text_dark'])])  # #2E5A4F
 
-        # 파스텔 초록 라지 (큰 저장/완료 버튼용)
-        style.configure('PastelGreenLarge.TButton',
-                        font=('Arial', 14, 'bold'),
-                        foreground='white',
-                        background='#98E4D6',
-                        borderwidth=0,
-                        focuscolor='none',
-                        relief='flat',
-                        padding=(25, 12))
-
-        style.map('PastelGreenLarge.TButton',
-                  background=[('active', '#7DDCC9'),
-                              ('pressed', '#6BC4B0'),
-                              ('disabled', '#B8B8B8')])
-
-        # 파스텔 세이지 그린 (대안 색상)
-        style.configure('PastelSage.TButton',
+        # 새로운 틸/진한 그린 버튼 스타일 (deep_teal 사용)
+        style.configure('DeepTeal.TButton',
                         font=('Arial', 11, 'bold'),
                         foreground='white',
-                        background='#A8E6CF',  # 더 연한 파스텔 초록
+                        background=colors['deep_teal'],  # #007e7f
                         borderwidth=0,
                         focuscolor='none',
                         relief='flat',
                         padding=(15, 8))
 
-        style.map('PastelSage.TButton',
-                  background=[('active', '#98E4D6'),
-                              ('pressed', '#88D8C0'),
+        style.map('DeepTeal.TButton',
+                  background=[('active', colors['teal_hover']),  # #009a9c
+                              ('pressed', colors['text_dark']),   # #2E5A4F
+                              ('disabled', '#B8B8B8')])
+
+        # 진한 포레스트 그린 버튼 (어두운 색상)
+        style.configure('ForestGreen.TButton',
+                        font=('Arial', 11, 'bold'),
+                        foreground='white',
+                        background=colors['text_dark'],  # #2E5A4F
+                        borderwidth=0,
+                        focuscolor='none',
+                        relief='flat',
+                        padding=(15, 8))
+
+        style.map('ForestGreen.TButton',
+                  background=[('active', colors['forest_hover']),  # #3A6B5F
+                              ('pressed', colors['text_medium']),  # #4A7C69
                               ('disabled', '#B8B8B8')])
 
     @staticmethod
     def get_pastel_colors():
-        """파스텔 초록 컬러 팔레트 반환 (다른 곳에서 사용할 수 있도록)"""
+        """파스텔 그린 컬러 팔레트 반환"""
         return {
-            'main': '#98E4D6',      # 메인 파스텔 민트
-            'hover': '#7DDCC9',     # 호버
-            'pressed': '#6BC4B0',   # 클릭
-            'light': '#A8E6CF',     # 연한 버전
-            'text': '#5BB3A0',      # 텍스트용
-            'bg_light': '#F0FDF4',  # 배경용 연한 색
-            'bg_medium': '#E6F7ED'  # 배경용 중간 색
+            # 기본 파스텔 그린 계열
+            'primary': '#7DD3C0',    # 메인 파스텔 그린
+            'outline': '#52C7B8',    # 아웃라인/강조용
+            'large': '#A8E6CF',      # 라지 버튼용
+            'soft': '#E8F5F3',       # 배경용 매우 연한 색
+
+            # 진한 톤들
+            'deep_teal': '#007e7f',     # 진한 틸
+            'teal_hover': '#009a9c',    # 틸 호버
+            'forest_hover': '#3A6B5F',  # 포레스트 호버
+
+            # 텍스트/유틸리티 색상
+            'text_dark': '#2E5A4F',     # 어두운 텍스트용 (포레스트 그린)
+            'text_medium': '#4A7C69',   # 중간 톤 텍스트용
+            'pressed': '#6BC4B0'        # 클릭 효과용
         }

@@ -1,12 +1,13 @@
 import tkinter as tk
-from tkinter import ttk
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 
 
 class BaseTab:
-    def __init__(self, root, app):
-        self.root = root
+    def __init__(self, parent, app):
+        self.parent = parent
         self.app = app
-        self.frame = tk.Frame(root)  # 탭의 기본 프레임 생성성
+        self.frame = ttk.Frame(parent)
         self._init_variables()
         # BaseTab에서는 create_ui() 호출하지 않음
         # 각 자식 클래스에서 직접 호출하도록 함
@@ -16,5 +17,9 @@ class BaseTab:
         pass
 
     def create_ui(self):
-        """UI 생성 - 자식 클래스에서 구현"""
+        """서브클래스에서 오버라이드할 UI 생성 메서드"""
+        pass
+
+    def update_ui(self):
+        """서브클래스에서 오버라이드할 UI 업데이트 메서드"""
         pass

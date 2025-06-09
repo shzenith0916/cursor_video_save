@@ -1,6 +1,6 @@
 import tkinter as tk
-import ttkbootstrap as ttk  # ttkbootstrap으로 변경
-from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 from tkinter import messagebox, filedialog
 import cv2
 import threading
@@ -8,7 +8,7 @@ import time
 import os
 from PIL import Image, ImageTk
 from utils.utils import VideoUtils
-from ui_components.segment_table import SegmentTable
+from .segment_table import SegmentTable
 import csv
 import asyncio
 
@@ -253,29 +253,26 @@ class PreviewWindow:
             self.update_frames_optimized()
 
     def save_selection(self):
-        """현재 선택 구간 저장 - 중앙화된 메서드 사용"""
-        # 임시로 app의 start_time, end_time을 저장 (기존 값 백업)
-        original_start = getattr(self.app, 'start_time', 0)
-        original_end = getattr(self.app, 'end_time', 0)
+        """현재 선택 구간 저장 - 간소화된 버전"""
+        # 구간 데이터 생성
+        segment_data = self.app._create_segment_data(
+            self.video_path,
+            self.start_time,
+            self.end_time
+        )
 
-        try:
-            # 미리보기 창의 구간 정보를 app에 임시 설정
-            self.app.start_time = self.start_time
-            self.app.end_time = self.end_time
+        # 중복 체크 및 저장 (미리보기 창을 부모로 전달)
+        success = self.app.save_segment(
+            segment_data, parent_window=self.window)
 
-            # 중앙화된 저장 메서드 사용
-            success = self.app.save_current_segment(self.video_path)
+        if success:
+            # PreviewWindow의 테이블 새로고침
+            if hasattr(self, 'segment_table'):
+                self.segment_table.refresh()
 
-            if success:
-                # PreviewWindow의 테이블 새로고침
-                if hasattr(self, 'segment_table'):
-                    self.segment_table.refresh()
-                self.window.focus_force()
-
-        finally:
-            # 원래 값 복원
-            self.app.start_time = original_start
-            self.app.end_time = original_end
+        # 성공/실패 관계없이 미리보기 창에 포커스 복구
+        self.window.focus_force()
+        self.window.lift()  # 창을 맨 앞으로 가져오기
 
     def on_close(self):
         """창 닫기 이벤트"""

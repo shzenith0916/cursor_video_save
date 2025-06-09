@@ -1,11 +1,12 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from tkinter import messagebox
 import os
 from utils.utils import VideoUtils
 
 
 class SegmentTable:
-    def __init__(self, root, app, selection_callback=None, preview_window=None):
+    def __init__(self, root, app, preview_window=None, selection_callback=None):
         self.root = root
         self.app = app
         self.preview_window = preview_window  # PreviewWindow 직접 참조
@@ -16,8 +17,8 @@ class SegmentTable:
         self.editing_column = None
 
         # 테이블 컨테이너 생성
-        self.container = tk.Frame(root)
-        self.container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.container = ttk.Frame(root)
+        self.container.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
 
         # 테이블 생성
         self.create_table()
@@ -28,82 +29,63 @@ class SegmentTable:
     def create_table(self):
         """테이블 생성"""
         # 테이블 위에 표시할 텍스트
-        table_label = tk.Label(self.container,
-                               text="저장된 구간 목록",
-                               font=("Arial", 12, "bold"))
+        table_label = ttk.Label(self.container,
+                                text="저장된 구간 목록",
+                                font=("Arial", 12, "bold"))
         table_label.pack(pady=(10, 5))
 
         # 테이블 프레임 생성
-        table_frame = tk.Frame(self.container)
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        table_frame = ttk.Frame(self.container)
+        table_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
 
         # 스크롤바
         table_scroll = ttk.Scrollbar(table_frame)
-        table_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        table_scroll.pack(side=ttk.RIGHT, fill=ttk.Y)
 
         # 트리뷰 생성
         self.table = ttk.Treeview(table_frame,
                                   columns=("파일명", "시작시간", "종료시간",
-                                           "길이", "TYPE", "PAS", "잔여물"),
+                                           "길이", "TYPE", "의견1", "의견2"),
                                   show='headings',
                                   selectmode='browse',
+                                  # 위젯이 세로로 스크롤 될때, 스크롤바의 위치를 자동으로 업데이트하도록 연결 역할.
+                                  # 이 코드만으로는, 스크롤바를 움직여도 위젯이 움직이지 않고, 위젯(트리뷰)이 스크롤 될때만 스크롤바 위치 갱신됌.
                                   yscrollcommand=table_scroll.set,
                                   height=10)
-        self.table.pack(fill=tk.BOTH, expand=True)
+        self.table.pack(fill=ttk.BOTH, expand=True)
 
         # 스크롤바 연결
+        # 아래 코드가 있어야, 스크롤바가 위젯의 yview 메서드를 호출하도록 연결해야 양쪽(위젯→스크롤바, 스크롤바→위젯) 모두 정상 작동
         table_scroll.config(command=self.table.yview)
 
-        # 컬럼 설정
+        # 컬럼 설정 -> 전체 합계: 195 + 98 + 98 + 98 + 65 + 52 + 46 = 652px
         columns = {
-            "파일명": (150, tk.W),
-            "시작시간": (80, tk.CENTER),
-            "종료시간": (80, tk.CENTER),
-            "길이": (60, tk.CENTER),
-            "TYPE": (80, tk.CENTER),
-            "PAS": (100, tk.CENTER),
-            "잔여물": (100, tk.CENTER)
+            "파일명": (195, ttk.W),        # 0.30 * 650 = 195
+            "시작시간": (98, ttk.CENTER),   # 0.15 * 650 = 97.5 → 98
+            "종료시간": (98, ttk.CENTER),   # 0.15 * 650 = 97.5 → 98
+            "길이": (98, ttk.CENTER),      # 0.15 * 650 = 97.5 → 98
+            "TYPE": (65, ttk.CENTER),      # 0.10 * 650 = 65
+            "의견1": (52, ttk.CENTER),       # 0.08 * 650 = 52
+            "의견2": (46, ttk.CENTER)      # 0.07 * 650 = 45.5 → 46
         }
 
-        # 컬럼 헤더 설정정
+        # 컬럼 헤더 설정
         for col, (width, anchor) in columns.items():
             self.table.heading(col, text=col, anchor=anchor)
             self.table.column(col, width=width, minwidth=width, stretch=True)
 
         # 이벤트 바인딩
         self.container.bind('<Configure>', self._on_container_resize)
-        self.table.bind('<Double-1>', self.on_item_doubleclick)
+        self.table.bind('<Button-1>', self.on_item_click)  # 싱글클릭으로 편집
         # 구간 선택 이벤트 추가
         self.table.bind('<<TreeviewSelect>>', self.on_item_select)
 
         # 버튼 프레임
-        button_frame = tk.Frame(self.container)
-        button_frame.pack(fill=tk.X, pady=10)
+        button_frame = ttk.Frame(self.container)
+        button_frame.pack(fill=ttk.X, pady=10)
 
         # 버튼 스타일 설정
         self.button_style = ttk.Style()
-
-        # 기본 버튼 스타일 (RAISED 효과)
-        self.button_style.configure(
-            "Raised.TButton",
-            relief="raised",
-            borderwidth=2,
-            focuscolor="none",
-            padding=(15, 10),  # 패딩 증가로 버튼 크기 증가
-            font=("Arial", 10, "bold")
-        )
-
-        # 호버 효과 스타일 (테두리 진하게)
-        self.button_style.map(
-            "Raised.TButton",
-            relief=[('pressed', 'sunken'),
-                    ('active', 'raised')],
-            borderwidth=[('pressed', '3'),
-                         ('active', '3'),
-                         ('!active', '2')],
-            background=[('active', '#E8F4FD'),
-                        ('pressed', '#D0E8F2')]
-        )
 
         # 삭제 버튼 (빨간색 계열)
         self.button_style.configure(
@@ -150,12 +132,13 @@ class SegmentTable:
         # 삭제 버튼
         delete_button = ttk.Button(
             button_frame,
-            text="선택 구간 삭제",
+            text="🗑️ 선택 구간 삭제",
             command=self.delete_selected_segment,
             style="Delete.TButton",
+            bootstyle="danger",  # Bootstrap 스타일 추가
             width=20
         )
-        delete_button.pack(side=tk.LEFT, padx=8, pady=2)
+        delete_button.pack(side=ttk.LEFT, padx=8, pady=2)
 
         # CSV 내보내기 버튼
         export_button = ttk.Button(
@@ -163,9 +146,10 @@ class SegmentTable:
             text="CSV로 내보내기",
             command=self.export_to_csv,
             style="Export.TButton",
+            bootstyle="info-outline",  # Bootstrap 스타일 추가
             width=20
         )
-        export_button.pack(side=tk.LEFT, padx=8, pady=2)
+        export_button.pack(side=ttk.LEFT, padx=8, pady=2)
 
         # 초기 데이터 로드
         self.load_table_data()
@@ -177,7 +161,7 @@ class SegmentTable:
         # selection_callback은 함수포인터(콜백 함수)로, newtab에서 정의한 on_segment_selected 메서드를 Segment Table에 전달
         if select and self.selection_callback:
             try:
-                # 선택된 행의 인덱스 가져오기
+                # 선택된 행의 인덱스(첫번째) 가져오기
                 index = self.table.index(select[0])
 
                 # 원본 데이터에서 구간 정보 가져오기
@@ -199,30 +183,31 @@ class SegmentTable:
             available_width = event.width - 20
             width_ratios = {
                 "파일명": 0.30,
-                "시작시간": 0.12,
-                "종료시간": 0.12,
-                "길이": 0.08,
+                "시작시간": 0.15,
+                "종료시간": 0.15,
+                "길이": 0.15,
                 "TYPE": 0.10,
-                "PAS": 0.14,
-                "잔여물": 0.14
+                "의견1": 0.08,
+                "의견2": 0.07
             }
-
             for col, ratio in width_ratios.items():
                 width = int(available_width * ratio)
                 self.table.column(col, width=width, minwidth=int(width * 0.8))
 
-    def on_item_doubleclick(self, event):
-        """더블 클릭시 편집 시작"""
+    def on_item_click(self, event):  # 더블클릭에서 싱글클릭으로 변경
+        """싱글 클릭시 편집 시작"""
         selected_items = self.table.selection()
         if not selected_items:
             return
 
         item = selected_items[0]
+        # ttk.Treeview에서만 사용가능한 내장함수: identify_column(x), identify_row(y), identify_element(x,y), identify_region(x,y) 등이 있음.
         column = self.table.identify_column(event.x)
+        # #1, #2 등으로 나오기 때문에, #을 떼주고 -1 처리 해주어야 리스트에서 사용용가능.
         column_id = int(column.lstrip('#')) - 1
         column_name = self.table['columns'][column_id]
 
-        if column_name in ('잔여물', 'PAS'):
+        if column_name in ('의견1', '의견2'):
             self.start_edit(item, column)
 
     def start_edit(self, item, column):
@@ -235,7 +220,7 @@ class SegmentTable:
         current_value = values[column_id]
 
         if self.entry_edit is None:
-            self.entry_edit = tk.Entry(self.table)
+            self.entry_edit = ttk.Entry(self.table)
             self.entry_edit.bind('<Return>', lambda e: self.save_edit())
             self.entry_edit.bind('<Escape>', self.cancel_edit)
             self.entry_edit.bind('<FocusOut>', self.cancel_edit)
@@ -248,10 +233,10 @@ class SegmentTable:
         self.entry_edit.config(validate='key', validatecommand=wordlimit_cmd)
 
         self.entry_edit.place(x=x, y=y, width=width, height=height)
-        self.entry_edit.delete(0, tk.END)
+        self.entry_edit.delete(0, ttk.END)
         self.entry_edit.insert(0, current_value)
         self.entry_edit.focus()
-        self.entry_edit.select_range(0, tk.END)
+        self.entry_edit.select_range(0, ttk.END)
 
     def validate_input(self, value):
         """입력 검증"""
@@ -328,7 +313,7 @@ class SegmentTable:
             if self.preview_window and hasattr(self.preview_window, 'window'):
                 try:
                     self.preview_window.window.focus_force()
-                except tk.TclError:
+                except ttk.TclError:
                     pass  # 창이 이미 닫힌 경우 무시
 
             # 삭제 후 NewTab의 테이블도 업데이트

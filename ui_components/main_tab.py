@@ -2,6 +2,8 @@ import tkinter as tk
 import ttkbootstrap as ttk  # ttkbootstrap으로 변경
 from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
 from .base_tab import BaseTab
+import os
+from utils.utils import VideoUtils
 from utils.styles import AppStyles
 
 
@@ -47,8 +49,8 @@ class MainTab(BaseTab):
 
     def create_top_frame(self):
         "상단 프레임 생성 - 파일 선택"
-        self.top_frame = tk.Frame(self.frame)
-        self.top_frame.pack(pady=20, padx=20, fill=tk.X)
+        self.top_frame = ttk.Frame(self.frame)
+        self.top_frame.pack(pady=20, padx=20, fill=ttk.X)
         # 자식 위젯 크기에 따라 부모가 수축하지 않도록 막는 설정
         self.top_frame.pack_propagate(False)
 
@@ -77,7 +79,7 @@ class MainTab(BaseTab):
 
         # 비디오 선택 버튼 생성
         self.video_select_button = ttk.Button(
-            self.openfile_frame, text="파일 선택", bootstyle=PRIMARY, command=self.app.open_file)
+            self.openfile_frame, text="파일 선택", bootstyle="primary", command=self.app.open_file)
         self.video_select_button.grid(row=0, column=2, padx=(0, 5))
 
         # info 프레임 (오른쪽으로 이동)
@@ -165,12 +167,12 @@ class MainTab(BaseTab):
             self.slider_frame)  # 버튼들을 담을 내부 프레임
         control_buttons_subframe.pack(pady=8)
 
-        self.play_button = ttk.Button(control_buttons_subframe, text="재생 ▶",
-                                      bootstyle=(SUCCESS, OUTLINE), command=self.app.toggle_play)
+        self.play_button = ttk.Button(control_buttons_subframe, text="▶ 재생",
+                                      bootstyle="success-outline", command=self.app.toggle_play)
         self.play_button.pack(side=tk.LEFT, padx=8, pady=2)
 
-        self.stop_button = ttk.Button(control_buttons_subframe, text="정지 ⏹",
-                                      bootstyle=(DANGER, OUTLINE), command=self.app.stop_video)
+        self.stop_button = ttk.Button(control_buttons_subframe, text="⏹ 정지",
+                                      bootstyle="danger-outline", command=self.app.stop_video)
         self.stop_button.pack(side=tk.LEFT, padx=8, pady=2)
 
     def create_interval_section(self):  # <- create_edit_section 에서 이름 변경
@@ -215,7 +217,8 @@ class MainTab(BaseTab):
             self.save_action_frame,
             text="💾 구간 저장",
             style='PastelGreen.TButton',
-            command=self.app.save_current_segment,
+            command=lambda: self.app.save_current_segment(
+                parent_window=self.app.root),
             state=tk.DISABLED
         )
         self.save_segment_button.pack(

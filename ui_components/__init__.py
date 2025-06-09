@@ -1,21 +1,29 @@
-import tkinter as tk
-from tkinter import ttk
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 from .base_tab import BaseTab
 from .main_tab import MainTab
 from .new_tab import NewTab
 
 
-def create_tabs(root, app):
-    """탭들을 생성하고 관리하는 함수"""
-    notebook = ttk.Notebook(root)
-    notebook.pack(fill=tk.BOTH, expand=True)
+def create_tabs(parent, app):
+    """탭 생성 함수"""
 
-    # 메인 탭 생성
+    # 노트북 위젯 생성 (탭 컨테이너)
+    notebook = ttk.Notebook(parent)
+
+    # 메인 탭 생성 및 추가
     main_tab = MainTab(notebook, app)
-    notebook.add(main_tab.frame, text="비디오 편집")
+    notebook.add(main_tab.frame, text="메인 탭")
 
-    # 새로운 탭 생성
+    # New 탭 생성 및 추가
     new_tab = NewTab(notebook, app)
-    notebook.add(new_tab.frame, text="비디오 추출")
+    notebook.add(new_tab.frame, text="편집/추출 탭")
+    app.new_tab_instance = new_tab  # app에 new_tab 인스턴스 저장
 
-    return notebook
+    notebook.pack(fill='both', expand=True)
+
+    return {
+        'notebook': notebook,
+        'main_tab': main_tab,
+        'new_tab': new_tab
+    }

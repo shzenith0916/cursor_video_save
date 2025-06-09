@@ -1,11 +1,13 @@
 from .base_tab import BaseTab
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from tkinter import messagebox, filedialog
 import os
 import cv2
 from datetime import datetime
 from utils.utils import VideoUtils
-from ui_components.segment_table import SegmentTable
+from .segment_table import SegmentTable
 from function.extractor import VideoExtractor, ExtractConfig
 import threading
 
@@ -41,74 +43,43 @@ class NewTab(BaseTab):
     def create_ui(self):
         """UI 구성 요소 생성"""
         # 메인 프레임
-        self.main_frame = tk.Frame(self.frame)
-        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.main_frame = ttk.Frame(self.frame)
+        self.main_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
 
         # 상단: 3단 구조 (테이블 | 정보 | 이미지)
-        content_frame = tk.Frame(self.main_frame)
-        content_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        content_frame = ttk.Frame(self.main_frame)
+        content_frame.pack(fill=ttk.BOTH, expand=True, pady=(0, 10))
 
         # 1) 왼쪽: 구간 테이블 (고정 너비)
-        self.table_frame = tk.Frame(
-            content_frame, width=600, relief="solid", bd=1)
-        self.table_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
+        self.table_frame = ttk.Frame(content_frame, width=600)
+        self.table_frame.pack(side=ttk.LEFT, fill=ttk.Y, padx=(0, 5))
         self.table_frame.pack_propagate(False)
 
         # SegmentTable 컴포넌트
         self.segment_table = SegmentTable(self.table_frame, self.app)
 
         # 2) 중간: 파일 정보 (고정 너비)
-        self.info_frame = tk.Frame(
-            content_frame, width=400, relief="sunken", bd=1, bg="white")
-        self.info_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 5))
+        self.info_frame = ttk.Frame(content_frame, width=400)
+        self.info_frame.pack(side=ttk.LEFT, fill=ttk.Y, padx=(0, 5))
         self.info_frame.pack_propagate(False)
 
         # 정보 표시 레이블
-        info_title = tk.Label(
+        info_title = ttk.Label(
             self.info_frame,
             text="📁 파일 정보",
-            bg="lightblue",
-            font=("Arial", 11, "bold"),
-            pady=5
+            font=("Arial", 11, "bold")
         )
-        info_title.pack(fill=tk.X, side=tk.TOP)
+        info_title.pack(fill=ttk.X, side=ttk.TOP, pady=5)
 
-        self.file_info_label = tk.Label(
+        self.file_info_label = ttk.Label(
             self.info_frame,
             text="선택한 구간의 파일 정보가 여기에 표시됩니다.",
-            justify=tk.LEFT,
+            justify=ttk.LEFT,
             anchor="nw",
             wraplength=380,
-            bg="white",
             font=("Arial", 9)
         )
-        self.file_info_label.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        # 3) 오른쪽: 이미지 미리보기 영역 (확장 가능)
-        self.preview_frame = tk.Frame(
-            content_frame, relief="sunken", bd=1, bg="lightgray")
-        self.preview_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # 미리보기 제목
-        preview_title = tk.Label(
-            self.preview_frame,
-            text="이미지 미리보기",
-            bg="lightgreen",
-            font=("Arial", 11, "bold"),
-            pady=5
-        )
-        preview_title.pack(fill=tk.X, side=tk.TOP)
-
-        # 미리보기 영역 (나중에 이미지 표시용)
-        self.image_preview_label = tk.Label(
-            self.preview_frame,
-            text="구간을 선택 후\n이미지 추출 시\n추출된 이미지가\n여기에 표시됩니다.",
-            bg="lightgray",
-            font=("Arial", 10),
-            justify=tk.CENTER
-        )
-        self.image_preview_label.pack(
-            fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.file_info_label.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
 
         # 하단: 버튼 + 진행률 바
         self.create_bottom_controls()
@@ -119,47 +90,52 @@ class NewTab(BaseTab):
     def create_bottom_controls(self):
         """하단 컨트롤 영역 생성"""
         # 하단 프레임 (높이를 더 크게)
-        bottom_frame = tk.Frame(
-            self.main_frame, relief="raised", bd=2, bg="#f0f0f0", height=100)
-        bottom_frame.pack(fill=tk.X, pady=8)
+        bottom_frame = ttk.Frame(self.main_frame, height=100)
+        bottom_frame.pack(fill=ttk.X, pady=8)
         bottom_frame.pack_propagate(False)  # 크기 고정
 
         # 왼쪽: 진행률 바 영역 (패딩 증가)
-        progress_frame = tk.Frame(bottom_frame, bg="#f0f0f0")
-        progress_frame.pack(side=tk.LEFT, padx=20, pady=20)
+        progress_frame = ttk.Frame(bottom_frame)
+        progress_frame.pack(side=ttk.LEFT, padx=20, pady=20)
 
         # 진행률 바 제목과 아이콘
-        progress_title_frame = tk.Frame(progress_frame, bg="#f0f0f0")
-        progress_title_frame.pack(fill=tk.X, pady=(0, 8))
+        progress_title_frame = ttk.Frame(progress_frame)
+        progress_title_frame.pack(fill=ttk.X, pady=(0, 8))
 
-        self.progress_icon = tk.Label(
+        # ttk.Label에서 foreground 속성을 사용할 수 없으므로, ttk 위젯 스타일을 통해서 색상 변경.
+
+        # 진행률 아이콘 스타일 설정
+        style = ttk.Style()
+        style.theme_use('clam')
+
+        # 프로그레스바 스타일 설정정
+        style.configure("ProgressIcon.TLabel",
+                        foreground="#333333")
+
+        self.progress_icon = ttk.Label(
             progress_title_frame,
-            text="⚡",  # 번개 아이콘
-            bg="#f0f0f0",
+            text="Progress 진행률 ⚡",  # 번개 아이콘
             font=("Arial", 14),  # 아이콘 크기 증가
-            fg="#FF6B35"
         )
-        self.progress_icon.pack(side=tk.LEFT, padx=(0, 8))
+        self.progress_icon.pack(side=ttk.LEFT, padx=(0, 8))
 
-        tk.Label(
+        ttk.Label(
             progress_title_frame,
             text="작업 진행률",
-            bg="#f0f0f0",
             font=("Arial", 11, "bold"),  # 폰트 크기 증가
-            fg="#333333"
-        ).pack(side=tk.LEFT)
+        ).pack(side=ttk.LEFT)
 
         # 진행률 바와 퍼센티지를 담을 프레임
-        progress_bar_frame = tk.Frame(progress_frame, bg="#f0f0f0")
-        progress_bar_frame.pack(fill=tk.X, pady=(0, 5))
+        progress_bar_frame = ttk.Frame(progress_frame)
+        progress_bar_frame.pack(fill=ttk.X, pady=(0, 5))
 
         # 진행률 바 (더 길고 두껍게)
         style = ttk.Style()
         style.theme_use('clam')
         style.configure(
             "Custom.Horizontal.TProgressbar",
-            troughcolor='#E0E0E0',
-            background='#4CAF50',
+            troughcolor='#E0E0E0',  # 배경색상
+            background='#4CAF50',  # 진행된 부분 색상
             lightcolor='#4CAF50',
             darkcolor='#4CAF50',
             borderwidth=1,
@@ -175,33 +151,31 @@ class NewTab(BaseTab):
             mode="determinate",
             style="Custom.Horizontal.TProgressbar"
         )
-        self.progress_bar.pack(side=tk.LEFT, padx=(
+        self.progress_bar.pack(side=ttk.LEFT, padx=(
             0, 12), pady=5)  # pady 추가로 시각적 여백
 
         # 퍼센티지 표시
-        self.progress_percentage = tk.Label(
+        self.progress_percentage = ttk.Label(
             progress_bar_frame,
             text="0%",
-            bg="#f0f0f0",
             font=("Arial", 11, "bold"),  # 폰트 크기 증가
-            fg="#333333",
+            foreground="#333333",
             width=5
         )
-        self.progress_percentage.pack(side=tk.LEFT)
+        self.progress_percentage.pack(side=ttk.LEFT)
 
         # 상태 메시지 표시
-        self.progress_status = tk.Label(
+        self.progress_status = ttk.Label(
             progress_frame,
             text="대기 중...",
-            bg="#f0f0f0",
             font=("Arial", 9),
-            fg="#666666"
+            foreground="#666666"
         )
-        self.progress_status.pack(fill=tk.X, pady=(5, 0))
+        self.progress_status.pack(fill=ttk.X, pady=(5, 0))
 
         # 오른쪽: 버튼들 (패딩 증가)
-        button_frame = tk.Frame(bottom_frame, bg="#f0f0f0")
-        button_frame.pack(side=tk.RIGHT, padx=20, pady=20)
+        button_frame = ttk.Frame(bottom_frame)
+        button_frame.pack(side=ttk.RIGHT, padx=20, pady=20)
 
         # 버튼 스타일 설정
         button_style = ttk.Style()
@@ -229,7 +203,7 @@ class NewTab(BaseTab):
             command=self.extract_images,
             width=16,
             style="Modern.TButton"
-        ).pack(side=tk.RIGHT, padx=6, pady=4)
+        ).pack(side=ttk.RIGHT, padx=6, pady=4)
 
         # 비디오 추출 버튼
         ttk.Button(
@@ -238,7 +212,7 @@ class NewTab(BaseTab):
             command=self.extract_selected_segment,
             width=16,
             style="Modern.TButton"
-        ).pack(side=tk.RIGHT, padx=6, pady=4)
+        ).pack(side=ttk.RIGHT, padx=6, pady=4)
 
         # 취소 버튼
         ttk.Button(
@@ -247,7 +221,7 @@ class NewTab(BaseTab):
             command=self.cancel_extraction,
             width=12,
             style="Modern.TButton"
-        ).pack(side=tk.RIGHT, padx=6, pady=4)
+        ).pack(side=ttk.RIGHT, padx=6, pady=4)
 
     def file_info_update(self, file_path=None, start_time=None, end_time=None):
         """비디오 파일 정보와 선택된 구간 정보를 업데이트하는 메서드"""
@@ -457,15 +431,15 @@ class NewTab(BaseTab):
 
         # 진행률에 따른 색상 변경
         if value == 0:
-            self.progress_icon.config(fg="#999999")
+            self.progress_icon.config(foreground="#999999")
             self.progress_status.config(text="대기 중...")
         elif value < 50:
-            self.progress_icon.config(fg="#FF6B35")
+            self.progress_icon.config(foreground="#FF6B35")
         elif value < 100:
-            self.progress_icon.config(fg="#FFA500")
+            self.progress_icon.config(foreground="#FFA500")
         else:
-            self.progress_icon.config(fg="#4CAF50")
-            self.progress_status.config(text="✅ 완료!")
+            self.progress_icon.config(foreground="#4CAF50")
+            self.progress_status.config(text="비디오 추출 완료!")
 
     def _do_extraction(self, input_path, output_path, segment_info):
         """실제 추출 작업 (백그라운드)"""
