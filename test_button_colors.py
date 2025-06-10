@@ -51,17 +51,17 @@ canvas.bind_all("<MouseWheel>", _on_mousewheel)
 ttk.Label(scrollable_frame, text='=== AppStyles 스타일 ===',
           font=('Arial', 12, 'bold')).pack(pady=(20, 10))
 
-danger_btn = ttk.Button(
-    scrollable_frame, text='Danger.TButton ⚠️', style='Danger.TButton')
-danger_btn.pack(pady=5)
+pastel_btn1 = ttk.Button(
+    scrollable_frame, text='1Pastel.TButton ⚠️', style='1Pastel.TButton')
+pastel_btn1.pack(pady=5)
 
-large_btn = ttk.Button(
-    scrollable_frame, text='Large.TButton 🚀', style='Large.TButton')
-large_btn.pack(pady=5)
+pastel_btn2 = ttk.Button(
+    scrollable_frame, text='2Pastel.TButton 🚀', style='2Pastel.TButton')
+pastel_btn2.pack(pady=5)
 
-control_btn = ttk.Button(
-    scrollable_frame, text='Control.TButton ⏯️', style='Control.TButton')
-control_btn.pack(pady=5)
+pastel_btn3 = ttk.Button(
+    scrollable_frame, text='3Pastel.TButton ⏯️', style='3Pastel.TButton')
+pastel_btn3.pack(pady=5)
 
 # ========= 파스텔 스타일들 =========
 ttk.Label(scrollable_frame, text='=== 파스텔 스타일 ===',
@@ -78,6 +78,79 @@ deep_teal_btn.pack(pady=5)
 forest_green_btn = ttk.Button(
     scrollable_frame, text='ForestGreen.TButton 🌲', style='ForestGreen.TButton')
 forest_green_btn.pack(pady=5)
+
+
+# ========= 새로운 재생/정지 아웃라인 스타일들 =========
+ttk.Label(scrollable_frame, text='=== 새로운 재생/정지 아웃라인 스타일 ===',
+          font=('Arial', 12, 'bold')).pack(pady=(20, 10))
+
+play_outline_btn = ttk.Button(
+    scrollable_frame, text='▶ 재생 (PlayOutline.TButton)', style='PlayOutline.TButton')
+play_outline_btn.pack(pady=5)
+
+stop_outline_btn = ttk.Button(
+    scrollable_frame, text='■ 정지 (StopOutline.TButton)', style='StopOutline.TButton')
+stop_outline_btn.pack(pady=5)
+
+# 아이콘 크기 비교용 추가 버튼들
+ttk.Label(scrollable_frame, text='=== 아이콘 크기/스타일 비교 ===',
+          font=('Arial', 10, 'bold')).pack(pady=(10, 5))
+
+icon_test_frame = ttk.Frame(scrollable_frame)
+icon_test_frame.pack(pady=5)
+
+# 다양한 아이콘 옵션들
+play_options = ['▶', '⏵', '▷', '►']
+stop_options = ['■', '⏹', '◼', '⬛']
+temp_stop_options = ['⏸', '||', '⏸', '❚❚']
+
+for i, play_icon in enumerate(play_options):
+    btn = ttk.Button(
+        icon_test_frame, text=f'{play_icon} 재생{i+1}', style='PlayOutline.TButton', width=10)
+    btn.grid(row=0, column=i, padx=2, pady=2)
+
+for i, stop_icon in enumerate(stop_options):
+    btn = ttk.Button(
+        icon_test_frame, text=f'{stop_icon} 정지{i+1}', style='StopOutline.TButton', width=10)
+    btn.grid(row=1, column=i, padx=2, pady=2)
+
+for i, temp_stop_icon in enumerate(temp_stop_options):
+    btn = ttk.Button(
+        icon_test_frame, text=f'{temp_stop_icon} 일시정지{i+1}', style='WarningOutline.TButton', width=10)
+    btn.grid(row=2, column=i, padx=2, pady=2)
+
+# 일시정지 아이콘 테스트
+ttk.Label(scrollable_frame, text='=== 일시정지 아이콘 옵션들 ===',
+          font=('Arial', 10, 'bold')).pack(pady=(15, 5))
+
+pause_test_frame = ttk.Frame(scrollable_frame)
+pause_test_frame.pack(pady=5)
+
+# 다양한 일시정지 아이콘 옵션들
+pause_options = [
+    ('❚❚ 일시정지', '현재 사용'),
+    ('|| 일시정지', '얇은 세로선'),
+    ('▐▌ 일시정지', '블록 형태'),
+    ('∥ 일시정지', '평행선'),
+    ('⏯ 일시정지', '토글 아이콘'),
+    ('⫸ 일시정지', '더블바'),
+    ('⊡⊡ 일시정지', '사각 점들'),
+    ('⦀⦀ 일시정지', '원형 점들'),
+    ('⏮⏸ 일시정지', '이전+정지'),
+    ('일시정지', '텍스트만')
+]
+
+for i, (pause_text, description) in enumerate(pause_options):
+    row = i // 5  # 5개씩 한 줄
+    col = i % 5
+    btn = ttk.Button(
+        pause_test_frame, text=pause_text, style='PlayOutline.TButton', width=12)
+    btn.grid(row=row, column=col, padx=2, pady=2)
+
+    # 설명 레이블 (작게)
+    desc_label = ttk.Label(
+        pause_test_frame, text=description, font=('Arial', 8))
+    desc_label.grid(row=row+2, column=col, padx=2, pady=(0, 5))
 
 
 # ========= TTKBootstrap 기본 스타일들 =========
@@ -152,12 +225,14 @@ def on_button_click(button_name):
 
 # 모든 버튼에 클릭 이벤트 추가\
 buttons_info = [
-    (danger_btn, 'Danger.TButton'),
-    (large_btn, 'Large.TButton'),
-    (control_btn, 'Control.TButton'),
+    (pastel_btn1, '1Pastel.TButton'),
+    (pastel_btn2, '2Pastel.TButton'),
+    (pastel_btn3, '3Pastel.TButton'),
     (pastel_outline_btn, 'PastelGreenOutline.TButton'),
     (deep_teal_btn, 'DeepTeal.TButton'),        # 새로 추가
     (forest_green_btn, 'ForestGreen.TButton'),  # 새로 추가
+    (play_outline_btn, 'PlayOutline.TButton'),  # 새로 추가 ⭐
+    (stop_outline_btn, 'StopOutline.TButton'),  # 새로 추가 ⭐
     (primary_btn, 'Bootstrap Primary'),
     (secondary_btn, 'Bootstrap Secondary'),
     (success_bootstrap_btn, 'Bootstrap Success'),
@@ -181,9 +256,7 @@ print('1. AppStyles 커스텀 스타일들')
 print('2. 파스텔 스타일들')
 print('3. TTKBootstrap 기본 스타일들')
 print('4. TTKBootstrap Outline 스타일들')
-print('\n🖱️  마우스 휠로 스크롤하며 모든 버튼을 확인하세요!')
-print('🖱️  각 버튼을 클릭해보세요!')
-print('🎨  TTKBootstrap은 더 현대적이고 예쁜 스타일을 제공합니다.')
-print(f'🎭  현재 테마: flatly')
+print('🖱️ 각 버튼을 클릭해보세요!')
+print(f'현재 테마: flatly')
 
 root.mainloop()

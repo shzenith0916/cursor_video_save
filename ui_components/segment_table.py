@@ -132,10 +132,9 @@ class SegmentTable:
         # 삭제 버튼
         delete_button = ttk.Button(
             button_frame,
-            text="🗑️ 선택 구간 삭제",
+            text="선택 구간 삭제",
             command=self.delete_selected_segment,
-            style="Delete.TButton",
-            bootstyle="danger",  # Bootstrap 스타일 추가
+            style="InfoLarge.TButton",
             width=20
         )
         delete_button.pack(side=ttk.LEFT, padx=8, pady=2)
@@ -145,8 +144,7 @@ class SegmentTable:
             button_frame,
             text="CSV로 내보내기",
             command=self.export_to_csv,
-            style="Export.TButton",
-            bootstyle="info-outline",  # Bootstrap 스타일 추가
+            style="InfoLarge.TButton",
             width=20
         )
         export_button.pack(side=ttk.LEFT, padx=8, pady=2)

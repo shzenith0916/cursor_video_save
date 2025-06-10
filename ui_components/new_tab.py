@@ -104,13 +104,11 @@ class NewTab(BaseTab):
 
         # ttk.Label에서 foreground 속성을 사용할 수 없으므로, ttk 위젯 스타일을 통해서 색상 변경.
 
-        # 진행률 아이콘 스타일 설정
-        style = ttk.Style()
-        style.theme_use('clam')
+        # 진행률 아이콘 스타일 설정 - ttkbootstrap에서는 root.style 사용
+        style = self.app.root.style
 
         # 프로그레스바 스타일 설정정
-        style.configure("ProgressIcon.TLabel",
-                        foreground="#333333")
+        style.configure("ProgressIcon.TLabel")
 
         self.progress_icon = ttk.Label(
             progress_title_frame,
@@ -129,27 +127,14 @@ class NewTab(BaseTab):
         progress_bar_frame = ttk.Frame(progress_frame)
         progress_bar_frame.pack(fill=ttk.X, pady=(0, 5))
 
-        # 진행률 바 (더 길고 두껍게)
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure(
-            "Custom.Horizontal.TProgressbar",
-            troughcolor='#E0E0E0',  # 배경색상
-            background='#4CAF50',  # 진행된 부분 색상
-            lightcolor='#4CAF50',
-            darkcolor='#4CAF50',
-            borderwidth=1,
-            relief='solid',
-            pbarrelief='flat',
-            thickness=30  # 두께 설정
-        )
-
+        # ttkbootstrap 스타일 프로그래스바 (slider_test.py와 동일한 스타일)
+        # 사용 가능한 스타일: "primary", "success", "info", "warning", "danger", "success-striped", "danger-striped"
         self.progress_bar = ttk.Progressbar(
             progress_bar_frame,
             orient="horizontal",
             length=500,
             mode="determinate",
-            style="Custom.Horizontal.TProgressbar"
+            bootstyle="success"  # 녹색 스타일 사용 (작업 진행률에 적합)
         )
         self.progress_bar.pack(side=ttk.LEFT, padx=(
             0, 12), pady=5)  # pady 추가로 시각적 여백
@@ -177,8 +162,8 @@ class NewTab(BaseTab):
         button_frame = ttk.Frame(bottom_frame)
         button_frame.pack(side=ttk.RIGHT, padx=20, pady=20)
 
-        # 버튼 스타일 설정
-        button_style = ttk.Style()
+        # 버튼 스타일 설정 - ttkbootstrap에서는 root.style 사용
+        button_style = self.app.root.style
         button_style.configure(
             "Modern.TButton",
             relief="flat",

@@ -80,15 +80,7 @@ class PreviewWindow:
         self.main_frame = tk.Frame(self.window)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # 스타일 설정
-        style = ttk.Style()
-        style.configure("SavePreview.TButton", font=("Arial", 12, "bold"),
-                        background="#007bff", foreground="white", padding=(10, 5))  # 예시: 파란색 배경, 흰색 글씨
-        style.map("SavePreview.TButton",
-                  background=[('active', '#0056b3')],  # 활성화 시 약간 어둡게
-                  foreground=[('active', 'white')])
-
-        self.video_frame = tk.Frame(self.main_frame, bg="black", width=600)
+        self.video_frame = tk.Frame(self.main_frame, bg="black", width=500)
         self.video_frame.pack(side="left", fill=tk.BOTH, expand=False)
         self.video_frame.pack_propagate(False)  # 크기 고정
 
@@ -97,8 +89,8 @@ class PreviewWindow:
         self.video_label.pack(expand=True, fill="both")
         self.video_label.config(bg="black")
 
-        # 우측 프레임 (구간 정보 테이블)
-        self.right_frame = tk.Frame(self.main_frame, width=500)
+        # 우측 프레임 (구간 정보 테이블) - 크기 조금 늘림
+        self.right_frame = tk.Frame(self.main_frame, width=600)
         self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(10, 0))
         self.right_frame.pack_propagate(False)  # 최소 너비 유지
 
@@ -122,46 +114,48 @@ class PreviewWindow:
         self.control_right = tk.Frame(self.video_control_frame)
         self.control_right.pack(side=tk.RIGHT, padx=5)
 
-        # 재생/일시정지 버튼
+        # 재생/일시정지 버튼 - PlayOutline 스타일 사용
         self.play_button = ttk.Button(
             self.control_left,
-            text="⏸️",
-            bootstyle=SUCCESS,
-            command=self.toggle_play)
+            text="⏸ 일시정지",
+            style="PlayOutline.TButton",
+            command=self.toggle_play,
+            width=10
+        )
         self.play_button.pack(side=tk.LEFT, padx=8)
 
-        # 위치 레이블 (먼저 배치)
-        self.position_label = tk.Label(
+        # 위치 레이블 (먼저 배치) - ttk.Label로 변경
+        self.position_label = ttk.Label(
             self.control_center,
             text=f"{VideoUtils.format_time(self.start_time)} / {VideoUtils.format_time(self.end_time)}",
             font=("Arial", 11)
         )
         self.position_label.pack(side=tk.RIGHT, padx=5)
 
-        # 구간 정보 레이블 (위치 레이블 다음 배치치)
+        # 구간 정보 레이블 (위치 레이블 다음 배치) - ttk.Label로 변경
         self.segment_info = f"구간: {VideoUtils.format_time(self.start_time)} - {VideoUtils.format_time(self.end_time)}"
-        self.segment_label = tk.Label(
+        self.segment_label = ttk.Label(
             self.control_center,
             text=self.segment_info,
             font=("Arial", 11, "bold"),
-            fg='#0000FF')  # 더 진한 파란색 사용
+            foreground='#0000FF')  # fg -> foreground로 변경
         self.segment_label.pack(side=tk.RIGHT, padx=5)
 
         # 저장 버튼 (우측 프레임 먼저 배치. 도움말 다음 배치)
         self.save_button = ttk.Button(
             self.control_right,
             text="💾 구간 저장",
-            style="SavePreview.TButton",  # 커스텀 스타일 적용
+            style="3Pastel.TButton",
             command=self.save_selection
         )
         # ipady 추가로 버튼 세로 크기 증가
         self.save_button.pack(side=tk.LEFT, padx=10, ipady=5)
 
-        # ✅ 추가!! 도움말 레이블
-        help_label = tk.Label(self.control_right,
-                              text="💡 구간저장 버튼 클릭시, 모든 탭 테이블에 저장됩니다.",
-                              font=("Arial", 11),
-                              fg='gray')
+        # 도움말 레이블 - ttk.Label로 변경
+        help_label = ttk.Label(self.control_right,
+                               text="ⓘ 구간 목록의 저장, 삭제 내용이 모든 탭 테이블에 반영됩니다.",
+                               font=("Arial", 11),
+                               foreground='gray')
         help_label.pack(side=tk.RIGHT, padx=10)
 
         # 창 크기 변경 이벤트 바인딩
@@ -171,8 +165,8 @@ class PreviewWindow:
         """창 크기 변경 시 비디오 프레임 크기 조정"""
         if event.widget == self.window:  # 메인 창의 크기 변경일 때만 처리
             # 우측 프레임의 너비를 고정하고 남은 공간을 비디오 프레임에 할당
-            # 전체 너비에서 우측 프레임(400)과 여백(20) 제외
-            available_width = event.width - 420
+            # 전체 너비에서 우측 프레임(620)과 여백(20) 제외
+            available_width = event.width - 620
             if available_width > 0:
                 self.video_frame.configure(width=available_width)
 
@@ -214,7 +208,7 @@ class PreviewWindow:
         # 현재시간 확인 - 구간 끝에 도달하면 재생 중지
         if self.current_time >= self.end_time:
             self.is_playing = False
-            self.play_button.config(text="▶")
+            self.play_button.config(text="► 재생")
             return
 
         ret, frame = self.cap.read()
@@ -238,7 +232,7 @@ class PreviewWindow:
         """재생/일시정지 토글"""
         if self.is_playing:
             self.is_playing = False
-            self.play_button.config(text="▶")
+            self.play_button.config(text="► 재생")
         else:
             # 재생 시작 시 현재 위치가 종료 시간이면 시작 시간으로 이동
             if self.current_time >= self.end_time:
@@ -248,7 +242,7 @@ class PreviewWindow:
                 self.show_frame_at_time(self.start_time)
 
             self.is_playing = True
-            self.play_button.config(text="⏸")
+            self.play_button.config(text="|| 일시정지")
             # after 메서드를 사용하여 프레임 업데이트 시작
             self.update_frames_optimized()
 

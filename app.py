@@ -134,7 +134,7 @@ class VideoEditorApp:
         '''비디오 재생/일시정지 버튼 클릭 시 호출'''
         if not self.is_playing:
             self.is_playing = True
-            self.play_button.config(text="⏸")  # 일시정지 아이콘
+            self.play_button.config(text="|| 일시정지")  # 일시정지 아이콘
             # 재생 중에도 구간 설정 버튼 활성
             self.set_start_button.config(state=tk.NORMAL)
             self.set_end_button.config(state=tk.NORMAL)
@@ -144,7 +144,7 @@ class VideoEditorApp:
             self.update_video()
         else:
             self.is_playing = False
-            self.play_button.config(text="▶")  # 재생 아이콘
+            self.play_button.config(text="► 재생")  # 재생 아이콘
             # 일시정지 상태에서 구간 설정 버튼 활성화
             self.set_start_button.config(state=tk.NORMAL)
             self.set_end_button.config(state=tk.NORMAL)
@@ -155,7 +155,7 @@ class VideoEditorApp:
     def stop_video(self):
         """비디오 중지 버튼 클릭시 호출되는 함수로, 비디오를 처음으로 되돌림"""
         self.is_playing = False
-        self.play_button.config(text="▶")
+        self.play_button.config(text="► 재생")
 
         # cap이 None이 아닌지 확인 후 처리
         if self.cap is not None and self.cap.isOpened():
@@ -187,7 +187,7 @@ class VideoEditorApp:
                 if current_time >= self.end_time and self.is_playing:
                     self.is_playing = False
                     self.is_previewing = False
-                    self.play_button.config(text="▶")
+                    self.play_button.config(text="► 재생")
                     return
 
                 # 다음 프레임 예약
@@ -197,7 +197,7 @@ class VideoEditorApp:
             else:
                 # 비디오 끝에 다다르면 재생 중지
                 self.is_playing = False
-                self.play_button.config(text="▶")
+                self.play_button.config(text="► 재생")
                 # 구간 미리보기가 아닐경우, 처음으로 되돌리기
                 if not hasattr(self, 'is_previewing') or not self.is_previewing:
                     self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -420,7 +420,7 @@ class VideoEditorApp:
         # 구간 재생 모드 설정
         self.is_playing = True
         self.is_previewing = True  # 구간 재생 중임을 표시
-        self.play_button.config(text="⏸")
+        self.play_button.config(text="|| 일시정지")
 
         # 비동기 업데이트 시작
         self.update_video()
@@ -429,7 +429,7 @@ class VideoEditorApp:
         """구간 재생 중지"""
         self.is_playing = False
         self.is_previewing = False  # 구간 재생 상태 관리
-        self.play_button.config(text="▶")
+        self.play_button.config(text="► 재생")
 
     def get_saved_segments(self):
         """저장된 구간 목록 반환"""

@@ -65,9 +65,9 @@ class MainTab(BaseTab):
 
         # 파일 경로를 표시할 StringVar 생성
         self.app.video_path = tk.StringVar()
-        # 비디오 파일 선택 텍스트
-        self.videofile_label = tk.Label(
-            self.openfile_frame, text="비디오 파일 선택:", font=("Arial", 12))
+        # 비디오 파일 선택 텍스트 - 스타일 개선
+        self.videofile_label = ttk.Label(
+            self.openfile_frame, text="비디오 파일 선택", font=("Arial", 12, "bold"))
         self.videofile_label.grid(row=0, column=0, padx=(
             5, 5), sticky="w")  # width=60 제거 + sticky="w" 로 왼쪽으로 붙이기
 
@@ -79,7 +79,7 @@ class MainTab(BaseTab):
 
         # 비디오 선택 버튼 생성
         self.video_select_button = ttk.Button(
-            self.openfile_frame, text="파일 선택", bootstyle="primary", command=self.app.open_file)
+            self.openfile_frame, text="파일 선택", style="InfoLarge.TButton", command=self.app.open_file)
         self.video_select_button.grid(row=0, column=2, padx=(0, 5))
 
         # info 프레임 (오른쪽으로 이동)
@@ -88,7 +88,7 @@ class MainTab(BaseTab):
                              pady=10, sticky="w")  # grid에서 column 1, sticky="w"로 왼왼쪽 붙이기
 
         # 섹션 타이틀
-        self.section_title_label = tk.Label(
+        self.section_title_label = ttk.Label(
             self.info_frame, text="비디오정보", font=("Arial", 12, "bold"))
         self.section_title_label.pack(
             pady=(0, 2), anchor="w")  # 상단 패딩 약간, 왼쪽 정렬
@@ -98,8 +98,8 @@ class MainTab(BaseTab):
         self.separator.pack(fill=tk.X, pady=(0, 5), expand=True)  # 위아래 패딩 추가
 
         # 비디오 정보를 인포 프레임에 추가
-        self.video_info_label = tk.Label(
-            self.info_frame, text="", font=("Arial", 10), fg="gray", anchor="w", justify="left")
+        self.video_info_label = ttk.Label(
+            self.info_frame, text="", font=("Arial", 10), foreground="gray", anchor="w", justify="left")
         self.video_info_label.pack(fill=tk.X, expand=True, padx=5, pady=5)
 
     def create_video_frame(self):
@@ -156,7 +156,7 @@ class MainTab(BaseTab):
                                          style='Horizontal.TScale')
         self.position_slider.pack(fill=tk.X, padx=3, pady=5, expand=True)
 
-        self.position_label = tk.Label(self.slider_frame, text="00:00")
+        self.position_label = ttk.Label(self.slider_frame, text="00:00")
         self.position_label.pack(pady=3)
 
         self.create_button_section()  # 재생/정지 버튼은 slider_frame 소속
@@ -167,48 +167,54 @@ class MainTab(BaseTab):
             self.slider_frame)  # 버튼들을 담을 내부 프레임
         control_buttons_subframe.pack(pady=8)
 
-        self.play_button = ttk.Button(control_buttons_subframe, text="▶ 재생",
-                                      bootstyle="success-outline", command=self.app.toggle_play)
-        self.play_button.pack(side=tk.LEFT, padx=8, pady=2)
+        self.play_button = ttk.Button(control_buttons_subframe, text="► 재생",
+                                      style="PlayOutline.TButton", command=self.app.toggle_play, width=12)
+        self.play_button.pack(side=tk.LEFT, padx=10, pady=2)
 
-        self.stop_button = ttk.Button(control_buttons_subframe, text="⏹ 정지",
-                                      bootstyle="danger-outline", command=self.app.stop_video)
-        self.stop_button.pack(side=tk.LEFT, padx=8, pady=2)
+        self.stop_button = ttk.Button(control_buttons_subframe, text="◼ 정지",
+                                      style="StopOutline.TButton", command=self.app.stop_video, width=12)
+        self.stop_button.pack(side=tk.LEFT, padx=10, pady=2)
 
     def create_interval_section(self):  # <- create_edit_section 에서 이름 변경
         """구간의 시작 시간, 끝 시간 설정 섹션 (interval_frame 내에 배치)"""
+
+        # Grid 컬럼 설정 - 레이블과 버튼 정렬을 위해
+        self.interval_frame.columnconfigure(0, weight=0)  # 레이블 컬럼 (고정 크기)
+        self.interval_frame.columnconfigure(1, weight=1)  # 버튼 컬럼 (유연한 크기)
+
         # 시작 시간 관련 위젯들
-        self.start_frame = tk.Frame(self.interval_frame)
-        self.start_frame.pack(side=tk.TOP, pady=3, anchor="w")  # anchor 추가
-        self.start_time_label = tk.Label(
-            self.start_frame, text="구간 시작: 00:00", fg='blue')
-        self.start_time_label.pack(side=tk.LEFT, padx=(0, 5))
-        self.set_start_button = ttk.Button(self.start_frame,
+        self.start_time_label = ttk.Label(
+            self.interval_frame, text="구간 시작: 00:00")
+        self.start_time_label.grid(
+            row=0, column=0, sticky="w", pady=(0, 3), padx=(0, 10))
+
+        self.set_start_button = ttk.Button(self.interval_frame,
                                            text="시작 지점 설정",
                                            style='PastelGreenOutline.TButton',
                                            command=self.app.set_start_time,
                                            state=tk.DISABLED)
-        self.set_start_button.pack(side=tk.LEFT)
+        self.set_start_button.grid(row=0, column=1, sticky="w", pady=(0, 3))
 
         # 종료 시간 관련 위젯들
-        self.end_frame = tk.Frame(self.interval_frame)
-        self.end_frame.pack(side=tk.TOP, pady=3, anchor="w")  # anchor 추가
-        self.end_time_label = tk.Label(
-            self.end_frame, text="구간 종료: 00:00", fg='blue')
-        self.end_time_label.pack(side=tk.LEFT, padx=(0, 5))
-        self.set_end_button = ttk.Button(self.end_frame,
+        self.end_time_label = ttk.Label(
+            self.interval_frame, text="구간 종료: 00:00")
+        self.end_time_label.grid(
+            row=1, column=0, sticky="w", pady=(3, 10), padx=(0, 10))
+
+        self.set_end_button = ttk.Button(self.interval_frame,
                                          text="종료 지점 설정",
                                          style='PastelGreenOutline.TButton',
                                          command=self.app.set_end_time,
                                          state=tk.DISABLED)
-        self.set_end_button.pack(side=tk.LEFT)
+        self.set_end_button.grid(row=1, column=1, sticky="w", pady=(3, 10))
 
         # 도움말 레이블 (옵션)
-        help_label = tk.Label(self.interval_frame,
-                              text="💡 구간 설정 후 저장/미리보기가 가능합니다.",
-                              font=("Arial", 9),
-                              fg='gray')
-        help_label.pack(side=tk.TOP, pady=10, anchor="w")
+        help_label = ttk.Label(self.interval_frame,
+                               text="ⓘ 구간 설정 후 저장/미리보기가 가능합니다.",
+                               font=("Arial", 10),
+                               foreground='gray')
+        help_label.grid(row=2, column=0, columnspan=2,
+                        sticky="w", pady=(10, 0))
 
     # <- create_save_button 및 create_preview_button 통합
     def create_save_action_section(self):
@@ -216,7 +222,7 @@ class MainTab(BaseTab):
         self.save_segment_button = ttk.Button(
             self.save_action_frame,
             text="💾 구간 저장",
-            style='PastelGreen.TButton',
+            style='DeepTeal.TButton',
             command=lambda: self.app.save_current_segment(
                 parent_window=self.app.root),
             state=tk.DISABLED
@@ -227,7 +233,7 @@ class MainTab(BaseTab):
         self.preview_button = ttk.Button(
             self.save_action_frame,
             text="🎬 선택구간 미리보기",
-            style='PastelGreenOutline.TButton',
+            style='3Pastel.TButton',
             command=lambda: self.app.preview_selection()
         )
         self.preview_button.pack(pady=5, padx=5, fill=tk.X, expand=True)
