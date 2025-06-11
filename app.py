@@ -138,9 +138,8 @@ class VideoEditorApp:
             # 재생 중에도 구간 설정 버튼 활성
             self.set_start_button.config(state=tk.NORMAL)
             self.set_end_button.config(state=tk.NORMAL)
-            # 재생 중에는 구간저장 버튼 비활성
-            if hasattr(self, 'save_segment_button'):
-                self.save_segment_button.config(state=tk.DISABLED)
+            # 재생 중에도 구간저장 버튼 활성 (사용자 요청)
+            self._update_save_button_state()
             self.update_video()
         else:
             self.is_playing = False
@@ -149,8 +148,7 @@ class VideoEditorApp:
             self.set_start_button.config(state=tk.NORMAL)
             self.set_end_button.config(state=tk.NORMAL)
             # 구간이 올바르게 설정되어 있으면 저장 버튼도 활성화
-            if hasattr(self, 'save_segment_button') and self.start_time < self.end_time:
-                self.save_segment_button.config(state=tk.NORMAL)
+            self._update_save_button_state()
 
     def stop_video(self):
         """비디오 중지 버튼 클릭시 호출되는 함수로, 비디오를 처음으로 되돌림"""
@@ -271,7 +269,7 @@ class VideoEditorApp:
         """구간 저장 버튼 상태 업데이트"""
         if hasattr(self, 'save_segment_button'):
             if (hasattr(self, 'start_time') and hasattr(self, 'end_time') and
-                    self.start_time < self.end_time and not self.is_playing):
+                    self.start_time < self.end_time):
                 self.save_segment_button.config(state=tk.NORMAL)
             else:
                 self.save_segment_button.config(state=tk.DISABLED)
@@ -480,6 +478,11 @@ class VideoEditorApp:
 
     def save_current_segment(self, video_path=None, parent_window=None):
         """현재 선택된 구간을 저장하는 중앙화된 메서드"""
+        # 재생 중이면 먼저 중지 (저장되었다는 의미로)
+        if self.is_playing:
+            self.is_playing = False
+            self.play_button.config(text="► 재생")
+
         if self.start_time >= self.end_time:
             if parent_window:
                 messagebox.showwarning(

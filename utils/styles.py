@@ -44,13 +44,13 @@ class AppStyles:
         style.map('1Pastel.TButton',
                   background=[('active', colors['pastel_hover']),   # #7DD3C0
                               ('pressed', colors['pastel_medium']),  # #52C7B8
-                              ('disabled', '#B8B8B8')])
+                              ('disabled', colors['pastel_bg'])])
 
         # 2Pastel.TButton
         style.configure('2Pastel.TButton',
                         font=('Arial', 11, 'bold'),
                         foreground='white',
-                        background=colors['pastel_medium'],  # #52C7B8
+                        background=colors['text_medium'],
                         borderwidth=0,
                         focuscolor='none',
                         relief='flat',
@@ -58,12 +58,12 @@ class AppStyles:
 
         style.map('2Pastel.TButton',
                   background=[('active', colors['pastel_base']),    # #6BC4B0
-                              ('pressed', colors['text_dark']),  # #2E5A4F
-                              ('disabled', '#B8B8B8')])
+                              ('pressed', colors['text_dark']),    # #2E5A4F
+                              ('disabled', colors['pastel_bg'])])
 
         # 3Pastel.TButton > 미리보기 창 구간저장 버튼 스타일
         style.configure('3Pastel.TButton',
-                        font=('Arial', 12, 'bold'),
+                        font=('Arial', 11, 'bold'),
                         foreground='white',
                         background=colors['text_medium'],  # #4A7C69
                         borderwidth=0,
@@ -72,19 +72,37 @@ class AppStyles:
                         padding=(15, 8))
 
         style.map('3Pastel.TButton',
-                  background=[('active', colors['forest_hover']),  # #3A6B5F
+                  background=[('active', colors['text_dark']),  # #3A6B5F
                               ('pressed', colors['text_dark']),    # #2E5A4F
-                              ('disabled', '#B8B8B8')])
+                              ('disabled', colors['pastel_light'])])
 
         # ===== 파스텔 스타일들 =====
 
-        # 파스텔 초록 아웃라인 (서브 버튼용)
-        style.configure('PastelGreenOutline.TButton',
+        # 파스텔 아웃라인 (서브 버튼용)
+        style.configure('PastelGreenOutline2.TButton',
                         font=('Arial', 11, 'bold'),
-                        foreground=colors['pastel_medium'],  # #52C7B8
+                        foreground=colors['pastel_light'],
                         background='white',
                         borderwidth=2,
-                        bordercolor=colors['pastel_light'],   # #A8E6CF
+                        bordercolor=colors['pastel_light'],
+                        focuscolor='none',
+                        relief='solid',
+                        padding=(15, 8))
+
+        style.map('PastelGreenOutline2.TButton',
+                  background=[('active', colors['pastel_bg']),      # #E8F5F3
+                              ('pressed', colors['pastel_bg'])],
+                  foreground=[('active', colors['pastel_base']),   # #6BC4B0
+                              ('pressed', colors['text_dark'])],  # #2E5A4F
+                  bordercolor=[('disabled', colors['pastel_base'])])  # # 비활성화 시 테두리 deepteal
+
+        # 파스텔 아웃라인 (서브 버튼용)
+        style.configure('PastelGreenOutline.TButton',
+                        font=('Arial', 11, 'bold'),
+                        foreground=colors['pastel_medium'],
+                        background='white',
+                        borderwidth=2,
+                        bordercolor=colors['pastel_medium'],
                         focuscolor='none',
                         relief='solid',
                         padding=(15, 8))
@@ -99,7 +117,7 @@ class AppStyles:
         # 딥틸 > 메인탭 구간저장 버튼 스타일
         style.configure('DeepTeal.TButton',
                         font=('Arial', 11, 'bold'),
-                        foreground='white',
+                        foreground='white',  # 글씨 햐얀색
                         background=colors['deep_teal'],  # #007e7f
                         borderwidth=0,
                         focuscolor='none',
@@ -110,12 +128,12 @@ class AppStyles:
                   background=[('active', colors['teal_hover']),  # #009a9c
                               ('pressed', colors['text_dark']),   # #2E5A4F
                               ('disabled', colors['pastel_light'])],  # #A8E6CF (파스텔 그린)
-                  foreground=[('disabled', colors['text_medium'])])  # #4A7C69 (중간 톤 텍스트)
+                  foreground=[('disabled', colors['pastel_light'])])  # #4A7C69 (중간 톤 텍스트)
 
         # 포레스트 그린
         style.configure('ForestGreen.TButton',
                         font=('Arial', 12, 'bold'),
-                        foreground=colors['text_medium'],     # 중간 톤 녹색 텍스트
+                        foreground='white',  # 글씨 햐얀색
                         background=colors['pastel_light'],    # 파스텔 녹색 배경
                         borderwidth=0,
                         focuscolor='none',

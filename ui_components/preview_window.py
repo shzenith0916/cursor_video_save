@@ -76,11 +76,13 @@ class PreviewWindow:
     def create_ui(self):
         """UI 구성 요소 생성"""
 
-        # 메인 프레임
+        # 메인 프레임 - 창의 사방에 여백 추가
         self.main_frame = tk.Frame(self.window)
-        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # 패딩을 늘려서 버튼, 도움말 등이 창에 붙지 않게 처리
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
 
-        self.video_frame = tk.Frame(self.main_frame, bg="black", width=500)
+        self.video_frame = tk.Frame(self.main_frame, bg="black", width=500,
+                                    relief="solid", borderwidth=2)
         self.video_frame.pack(side="left", fill=tk.BOTH, expand=False)
         self.video_frame.pack_propagate(False)  # 크기 고정
 
@@ -98,9 +100,9 @@ class PreviewWindow:
         self.segment_table = SegmentTable(
             self.right_frame, self.app, preview_window=self)  # preview window 추가
 
-        # 컨트롤 플레임
+        # 컨트롤 플레임 - window에 직접 배치하되 패딩 증가
         self.video_control_frame = tk.Frame(self.window)
-        self.video_control_frame.pack(fill=tk.X, padx=10, pady=5)
+        self.video_control_frame.pack(fill=tk.X, padx=15, pady=(10, 25))
 
         # 좌측: 재생 컨트롤
         self.control_left = tk.Frame(self.video_control_frame)
@@ -137,15 +139,14 @@ class PreviewWindow:
         self.segment_label = ttk.Label(
             self.control_center,
             text=self.segment_info,
-            font=("Arial", 11, "bold"),
-            foreground='#0000FF')  # fg -> foreground로 변경
+            font=("Arial", 11, "bold"))
         self.segment_label.pack(side=tk.RIGHT, padx=5)
 
         # 저장 버튼 (우측 프레임 먼저 배치. 도움말 다음 배치)
         self.save_button = ttk.Button(
             self.control_right,
             text="💾 구간 저장",
-            style="3Pastel.TButton",
+            style="2Pastel.TButton",
             command=self.save_selection
         )
         # ipady 추가로 버튼 세로 크기 증가
@@ -154,7 +155,7 @@ class PreviewWindow:
         # 도움말 레이블 - ttk.Label로 변경
         help_label = ttk.Label(self.control_right,
                                text="ⓘ 구간 목록의 저장, 삭제 내용이 모든 탭 테이블에 반영됩니다.",
-                               font=("Arial", 11),
+                               font=("Open Sans", 11),
                                foreground='gray')
         help_label.pack(side=tk.RIGHT, padx=10)
 

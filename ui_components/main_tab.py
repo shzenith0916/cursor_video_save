@@ -107,7 +107,8 @@ class MainTab(BaseTab):
             비디오 로딩 안할때 백그라운드 컬러는 black"""
         # 비디오 프레임
         self.video_frame = tk.Frame(
-            self.frame, bg="black", width=640, height=360)
+            self.frame, bg="black", width=640, height=360,
+            relief="solid", borderwidth=2)
         self.video_frame.pack(fill='both', expand=True, padx=10, pady=10)
         self.video_frame.pack_propagate(False)
 
@@ -156,7 +157,8 @@ class MainTab(BaseTab):
                                          style='Horizontal.TScale')
         self.position_slider.pack(fill=tk.X, padx=3, pady=5, expand=True)
 
-        self.position_label = ttk.Label(self.slider_frame, text="00:00")
+        self.position_label = ttk.Label(self.slider_frame, text="00:00",
+                                        font=("Arial", 11, "bold"))
         self.position_label.pack(pady=3)
 
         self.create_button_section()  # 재생/정지 버튼은 slider_frame 소속
@@ -184,7 +186,7 @@ class MainTab(BaseTab):
 
         # 시작 시간 관련 위젯들
         self.start_time_label = ttk.Label(
-            self.interval_frame, text="구간 시작: 00:00")
+            self.interval_frame, text="구간 시작: 00:00", font=("Arial", 10, "bold"))
         self.start_time_label.grid(
             row=0, column=0, sticky="w", pady=(0, 3), padx=(0, 10))
 
@@ -197,7 +199,7 @@ class MainTab(BaseTab):
 
         # 종료 시간 관련 위젯들
         self.end_time_label = ttk.Label(
-            self.interval_frame, text="구간 종료: 00:00")
+            self.interval_frame, text="구간 종료: 00:00", font=("Arial", 10, "bold"))
         self.end_time_label.grid(
             row=1, column=0, sticky="w", pady=(3, 10), padx=(0, 10))
 
@@ -211,7 +213,7 @@ class MainTab(BaseTab):
         # 도움말 레이블 (옵션)
         help_label = ttk.Label(self.interval_frame,
                                text="ⓘ 구간 설정 후 저장/미리보기가 가능합니다.",
-                               font=("Arial", 10),
+                               font=("Tahoma", 11),
                                foreground='gray')
         help_label.grid(row=2, column=0, columnspan=2,
                         sticky="w", pady=(10, 0))
@@ -222,10 +224,9 @@ class MainTab(BaseTab):
         self.save_segment_button = ttk.Button(
             self.save_action_frame,
             text="💾 구간 저장",
-            style='DeepTeal.TButton',
+            style='2Pastel.TButton',
             command=lambda: self.app.save_current_segment(
-                parent_window=self.app.root),
-            state=tk.DISABLED
+                parent_window=self.app.root)
         )
         self.save_segment_button.pack(
             pady=(10, 5), padx=5, fill=tk.X, expand=True)

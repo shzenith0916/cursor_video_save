@@ -68,15 +68,19 @@ ttk.Label(scrollable_frame, text='=== 파스텔 스타일 ===',
           font=('Arial', 12, 'bold')).pack(pady=(20, 10))
 
 pastel_outline_btn = ttk.Button(
-    scrollable_frame, text='PastelGreenOutline.TButton 🌿', style='PastelGreenOutline.TButton')
+    scrollable_frame, text='PastelGreenOutline.TButton', style='PastelGreenOutline.TButton')
 pastel_outline_btn.pack(pady=5)
 
+pastel_outline_btn2 = ttk.Button(
+    scrollable_frame, text='PastelGreenOutline2.TButton', style='PastelGreenOutline2.TButton')
+pastel_outline_btn2.pack(pady=5)
+
 deep_teal_btn = ttk.Button(
-    scrollable_frame, text='DeepTeal.TButton 🌊', style='DeepTeal.TButton')
+    scrollable_frame, text='DeepTeal.TButton', style='DeepTeal.TButton')
 deep_teal_btn.pack(pady=5)
 
 forest_green_btn = ttk.Button(
-    scrollable_frame, text='ForestGreen.TButton 🌲', style='ForestGreen.TButton')
+    scrollable_frame, text='ForestGreen.TButton', style='ForestGreen.TButton')
 forest_green_btn.pack(pady=5)
 
 
@@ -116,42 +120,8 @@ for i, stop_icon in enumerate(stop_options):
 
 for i, temp_stop_icon in enumerate(temp_stop_options):
     btn = ttk.Button(
-        icon_test_frame, text=f'{temp_stop_icon} 일시정지{i+1}', style='WarningOutline.TButton', width=10)
+        icon_test_frame, text=f'{temp_stop_icon} 일시정지{i+1}', style='ExtraLarge.WarningOutline.TButton', width=10)
     btn.grid(row=2, column=i, padx=2, pady=2)
-
-# 일시정지 아이콘 테스트
-ttk.Label(scrollable_frame, text='=== 일시정지 아이콘 옵션들 ===',
-          font=('Arial', 10, 'bold')).pack(pady=(15, 5))
-
-pause_test_frame = ttk.Frame(scrollable_frame)
-pause_test_frame.pack(pady=5)
-
-# 다양한 일시정지 아이콘 옵션들
-pause_options = [
-    ('❚❚ 일시정지', '현재 사용'),
-    ('|| 일시정지', '얇은 세로선'),
-    ('▐▌ 일시정지', '블록 형태'),
-    ('∥ 일시정지', '평행선'),
-    ('⏯ 일시정지', '토글 아이콘'),
-    ('⫸ 일시정지', '더블바'),
-    ('⊡⊡ 일시정지', '사각 점들'),
-    ('⦀⦀ 일시정지', '원형 점들'),
-    ('⏮⏸ 일시정지', '이전+정지'),
-    ('일시정지', '텍스트만')
-]
-
-for i, (pause_text, description) in enumerate(pause_options):
-    row = i // 5  # 5개씩 한 줄
-    col = i % 5
-    btn = ttk.Button(
-        pause_test_frame, text=pause_text, style='PlayOutline.TButton', width=12)
-    btn.grid(row=row, column=col, padx=2, pady=2)
-
-    # 설명 레이블 (작게)
-    desc_label = ttk.Label(
-        pause_test_frame, text=description, font=('Arial', 8))
-    desc_label.grid(row=row+2, column=col, padx=2, pady=(0, 5))
-
 
 # ========= TTKBootstrap 기본 스타일들 =========
 ttk.Label(scrollable_frame, text='=== TTKBootstrap 기본 스타일 ===',
@@ -229,6 +199,7 @@ buttons_info = [
     (pastel_btn2, '2Pastel.TButton'),
     (pastel_btn3, '3Pastel.TButton'),
     (pastel_outline_btn, 'PastelGreenOutline.TButton'),
+    (pastel_outline_btn2, 'PastelGreenOutline2.TButton'),
     (deep_teal_btn, 'DeepTeal.TButton'),        # 새로 추가
     (forest_green_btn, 'ForestGreen.TButton'),  # 새로 추가
     (play_outline_btn, 'PlayOutline.TButton'),  # 새로 추가 ⭐

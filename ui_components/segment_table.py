@@ -1,8 +1,10 @@
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import os
 from utils.utils import VideoUtils
+import csv
+from datetime import datetime
 
 
 class SegmentTable:
@@ -30,7 +32,7 @@ class SegmentTable:
         """테이블 생성"""
         # 테이블 위에 표시할 텍스트
         table_label = ttk.Label(self.container,
-                                text="저장된 구간 목록",
+                                text="저장된 구간 목록 테이블",
                                 font=("Arial", 12, "bold"))
         table_label.pack(pady=(10, 5))
 
@@ -134,7 +136,7 @@ class SegmentTable:
             button_frame,
             text="선택 구간 삭제",
             command=self.delete_selected_segment,
-            style="InfoLarge.TButton",
+            style="Large.primary.TButton",
             width=20
         )
         delete_button.pack(side=ttk.LEFT, padx=8, pady=2)
@@ -144,7 +146,7 @@ class SegmentTable:
             button_frame,
             text="CSV로 내보내기",
             command=self.export_to_csv,
-            style="InfoLarge.TButton",
+            style="Large.primary.TButton",
             width=20
         )
         export_button.pack(side=ttk.LEFT, padx=8, pady=2)
@@ -320,16 +322,19 @@ class SegmentTable:
 
     def export_to_csv(self):
         """CSV 내보내기"""
-        from tkinter import filedialog
-        import csv
 
-        if not hasattr(self.app, 'saved_segments'):
+        if not hasattr(self.app, 'saved_segments') or not self.app.saved_segments:
+            messagebox.showwarning("경고", "내보낼 구간 데이터가 없습니다.")
             return
+
+        # 자동 파일명 생성
+        default_filename = self.generate_csv_filename()
 
         file_path = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
-            title="구간데이터_저장"
+            title="구간데이터_저장",
+            initialfile=default_filename
         )
 
         if file_path:
@@ -337,7 +342,7 @@ class SegmentTable:
                 with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(
-                        ['파일명', '시작 시간', '종료 시간', '구간 길이', '식이타입', 'PAS', '잔여물'])
+                        ['파일명', '시작 시간', '종료 시간', '구간 길이', '타입', '의견1', '의견2'])
 
                     for segment in self.app.saved_segments:
                         filename = segment.get('file', '')
@@ -358,6 +363,43 @@ class SegmentTable:
                     "성공", f"데이터가 {os.path.basename(file_path)}에 저장되었습니다.")
             except Exception as e:
                 messagebox.showerror("오류", f"파일 저장 중 오류가 발생했습니다: {str(e)}")
+
+    def generate_csv_filename(self):
+        """CSV 파일명 자동 생성"""
+        # 현재 날짜와 시간
+        now = datetime.now()
+        date_str = now.strftime("%Y%m%d")
+
+        # 비디오 파일명 가져오기
+        video_name = "비디오"
+        if hasattr(self.app, 'video_path') and self.app.video_path:
+            if hasattr(self.app.video_path, 'get'):
+                video_path = self.app.video_path.get()
+            else:
+                video_path = self.app.video_path
+
+            if video_path:
+                # 파일명에서 확장자 제거
+                video_name = os.path.splitext(os.path.basename(video_path))[0]
+                # 파일명에서 특수문자 제거 (Windows 파일명 호환성)
+                video_name = "".join(
+                    c for c in video_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                if not video_name:
+                    video_name = "비디오"
+
+        # 구간 수 정보
+        segment_count = len(self.app.saved_segments) if hasattr(
+            self.app, 'saved_segments') else 0
+
+        # 파일명 생성: "비디오명_구간데이터_구간수개_날짜시간.csv"
+        filename = f"{video_name}_구간데이터_{segment_count}개_{date_str}.csv"
+
+        # 파일명 길이 제한 (Windows 경로 길이 제한 고려)
+        if len(filename) > 100:
+            video_name = video_name[:30] + "..."
+            filename = f"{video_name}_구간데이터_{segment_count}개_{date_str}.csv"
+
+        return filename
 
     def refresh(self):
         """테이블 데이터 새로고침"""

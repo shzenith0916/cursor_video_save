@@ -46,7 +46,7 @@ class NewTab(BaseTab):
         self.main_frame = ttk.Frame(self.frame)
         self.main_frame.pack(fill=ttk.BOTH, expand=True, padx=5, pady=5)
 
-        # 상단: 3단 구조 (테이블 | 정보 | 이미지)
+        # 상단: 3단 구조 (테이블 | 정보 및 추출 버튼| 저장 설정)
         content_frame = ttk.Frame(self.main_frame)
         content_frame.pack(fill=ttk.BOTH, expand=True, pady=(0, 10))
 
@@ -58,18 +58,23 @@ class NewTab(BaseTab):
         # SegmentTable 컴포넌트
         self.segment_table = SegmentTable(self.table_frame, self.app)
 
-        # 2) 중간: 파일 정보 (고정 너비)
+        # 2) 중간: 파일 정보 + 프로그레스 바 (고정 너비)
         self.info_frame = ttk.Frame(content_frame, width=400)
         self.info_frame.pack(side=ttk.LEFT, fill=ttk.Y, padx=(0, 5))
         self.info_frame.pack_propagate(False)
+
+        # 3) 오른쪽: 저장 설정 섹션
+        self.setting_help_freme = ttk.Frame(content_frame)
+        self.setting_help_freme.pack(
+            side=ttk.RIGHT, fill=ttk.BOTH, expand=True, padx=(5, 0))
 
         # 정보 표시 레이블
         info_title = ttk.Label(
             self.info_frame,
             text="📁 파일 정보",
-            font=("Arial", 11, "bold")
+            font=("Arial", 13, "bold")
         )
-        info_title.pack(fill=ttk.X, side=ttk.TOP, pady=5)
+        info_title.pack(fill=ttk.X, side=ttk.TOP, pady=(15, 5))
 
         self.file_info_label = ttk.Label(
             self.info_frame,
@@ -77,136 +82,109 @@ class NewTab(BaseTab):
             justify=ttk.LEFT,
             anchor="nw",
             wraplength=380,
-            font=("Arial", 9)
+            font=("Arial", 11)
         )
         self.file_info_label.pack(fill=ttk.BOTH, expand=True, padx=10, pady=10)
 
-        # 하단: 버튼 + 진행률 바
-        self.create_bottom_controls()
+        # 파일 정보 하단에 프로그레스 바 추가
+        self.create_progress_controls()
+
+        # 파일 정보 영역 하단에 버튼들 추가
+        self.create_info_buttons()
+
+        # 설정 섹션 생성
+        self.create_settings_sections()
 
         # 콜백 설정
         self.segment_table.selection_callback = self.on_segment_selected
 
-    def create_bottom_controls(self):
-        """하단 컨트롤 영역 생성"""
-        # 하단 프레임 (높이를 더 크게)
-        bottom_frame = ttk.Frame(self.main_frame, height=100)
-        bottom_frame.pack(fill=ttk.X, pady=8)
-        bottom_frame.pack_propagate(False)  # 크기 고정
+    def create_progress_controls(self):
+        """파일 정보 하단에 프로그레스 바 생성"""
+        # 구분선 추가
+        separator = ttk.Separator(self.info_frame, orient="horizontal")
+        separator.pack(fill=ttk.X, pady=(10, 10))
 
-        # 왼쪽: 진행률 바 영역 (패딩 증가)
-        progress_frame = ttk.Frame(bottom_frame)
-        progress_frame.pack(side=ttk.LEFT, padx=20, pady=20)
-
-        # 진행률 바 제목과 아이콘
-        progress_title_frame = ttk.Frame(progress_frame)
-        progress_title_frame.pack(fill=ttk.X, pady=(0, 8))
-
-        # ttk.Label에서 foreground 속성을 사용할 수 없으므로, ttk 위젯 스타일을 통해서 색상 변경.
-
-        # 진행률 아이콘 스타일 설정 - ttkbootstrap에서는 root.style 사용
-        style = self.app.root.style
-
-        # 프로그레스바 스타일 설정정
-        style.configure("ProgressIcon.TLabel")
-
-        self.progress_icon = ttk.Label(
-            progress_title_frame,
-            text="Progress 진행률 ⚡",  # 번개 아이콘
-            font=("Arial", 14),  # 아이콘 크기 증가
+        # 섹션 타이틀 (main_tab 스타일)
+        progress_title = ttk.Label(
+            self.info_frame,
+            text="⚡ 작업 진행률",
+            font=("Arial", 12, "bold")
         )
-        self.progress_icon.pack(side=ttk.LEFT, padx=(0, 8))
+        progress_title.pack(pady=(5, 2), padx=10, anchor="w")
 
-        ttk.Label(
-            progress_title_frame,
-            text="작업 진행률",
-            font=("Arial", 11, "bold"),  # 폰트 크기 증가
-        ).pack(side=ttk.LEFT)
+        # 진행률 바 프레임
+        progress_frame = ttk.Frame(self.info_frame)
+        progress_frame.pack(fill=ttk.X, padx=10, pady=(5, 5))
 
-        # 진행률 바와 퍼센티지를 담을 프레임
-        progress_bar_frame = ttk.Frame(progress_frame)
-        progress_bar_frame.pack(fill=ttk.X, pady=(0, 5))
+        # 프로그레스바와 퍼센티지를 수평으로 배치
+        progress_container = ttk.Frame(progress_frame)
+        progress_container.pack(fill=ttk.X, pady=(0, 5))
 
-        # ttkbootstrap 스타일 프로그래스바 (slider_test.py와 동일한 스타일)
-        # 사용 가능한 스타일: "primary", "success", "info", "warning", "danger", "success-striped", "danger-striped"
+        # ttkbootstrap 스타일 프로그래스바
         self.progress_bar = ttk.Progressbar(
-            progress_bar_frame,
+            progress_container,
             orient="horizontal",
-            length=500,
             mode="determinate",
-            bootstyle="success"  # 녹색 스타일 사용 (작업 진행률에 적합)
+            bootstyle="success-striped"
         )
-        self.progress_bar.pack(side=ttk.LEFT, padx=(
-            0, 12), pady=5)  # pady 추가로 시각적 여백
+        self.progress_bar.pack(side=ttk.LEFT, fill=ttk.X,
+                               expand=True, padx=(0, 10))
 
         # 퍼센티지 표시
         self.progress_percentage = ttk.Label(
-            progress_bar_frame,
+            progress_container,
             text="0%",
-            font=("Arial", 11, "bold"),  # 폰트 크기 증가
-            foreground="#333333",
-            width=5
+            font=("Arial", 10, "bold"),
+            width=6
         )
-        self.progress_percentage.pack(side=ttk.LEFT)
+        self.progress_percentage.pack(side=ttk.RIGHT)
 
-        # 상태 메시지 표시
+        # 상태 메시지 표시 (main_tab의 도움말 스타일)
         self.progress_status = ttk.Label(
             progress_frame,
-            text="대기 중...",
-            font=("Arial", 9),
-            foreground="#666666"
+            text="ⓘ 작업 대기 중입니다.",
+            font=("Arial", 10),
+            foreground="gray"
         )
-        self.progress_status.pack(fill=ttk.X, pady=(5, 0))
+        self.progress_status.pack(fill=ttk.X, pady=(5, 0), anchor="w")
 
-        # 오른쪽: 버튼들 (패딩 증가)
-        button_frame = ttk.Frame(bottom_frame)
-        button_frame.pack(side=ttk.RIGHT, padx=20, pady=20)
+    def create_info_buttons(self):
+        """파일 정보 영역 하단 버튼들 생성 - main_tab 스타일 적용"""
+        # 구분선 추가
+        separator2 = ttk.Separator(self.info_frame, orient="horizontal")
+        separator2.pack(fill=ttk.X, pady=(10, 5))
 
-        # 버튼 스타일 설정 - ttkbootstrap에서는 root.style 사용
-        button_style = self.app.root.style
-        button_style.configure(
-            "Modern.TButton",
-            relief="flat",
-            borderwidth=1,
-            focuscolor="none",
-            padding=(10, 8)
-        )
+        # 버튼 프레임 - info_frame 내에 배치
+        button_frame = ttk.Frame(self.info_frame)
+        button_frame.pack(fill=ttk.X, padx=20, pady=(10, 20))
 
-        # 비활성화된 버튼 스타일
-        button_style.configure(
-            "Disabled.TButton",
-            relief="flat",
-            borderwidth=0,
-            focuscolor="none",
-            padding=(10, 8)
-        )
-
-        # 이미지 추출 버튼
-        ttk.Button(
-            button_frame,
-            text="이미지 추출",
-            command=self.extract_images,
-            width=16,
-            style="Modern.TButton"
-        ).pack(side=ttk.RIGHT, padx=6, pady=4)
-
-        # 비디오 추출 버튼
-        ttk.Button(
+        # 비디오 추출 버튼 (3Pastel 스타일)
+        self.video_extract_button = ttk.Button(
             button_frame,
             text="🎬 비디오 추출",
-            command=self.extract_selected_segment,
-            width=16,
-            style="Modern.TButton"
-        ).pack(side=ttk.RIGHT, padx=6, pady=4)
+            style='3Pastel.TButton',
+            command=self.extract_selected_segment
+        )
+        self.video_extract_button.pack(
+            pady=(5, 3), padx=5, fill=ttk.X, expand=True)
 
-        # 취소 버튼
-        ttk.Button(
+        # 이미지 추출 버튼 (3Pastel 스타일)
+        self.image_extract_button = ttk.Button(
             button_frame,
-            text="❌ 취소",
-            command=self.cancel_extraction,
-            width=12,
-            style="Modern.TButton"
-        ).pack(side=ttk.RIGHT, padx=6, pady=4)
+            text="이미지 추출",
+            style='3Pastel.TButton',
+            command=self.extract_images
+        )
+        self.image_extract_button.pack(pady=3, padx=5, fill=ttk.X, expand=True)
+
+        # 취소 버튼 (3Pastel 스타일)
+        self.cancel_button = ttk.Button(
+            button_frame,
+            text="❌ 작업 취소",
+            style='3Pastel.TButton',
+            command=self.cancel_extraction
+        )
+        self.cancel_button.pack(pady=(3, 5), padx=5, fill=ttk.X, expand=True)
 
     def file_info_update(self, file_path=None, start_time=None, end_time=None):
         """비디오 파일 정보와 선택된 구간 정보를 업데이트하는 메서드"""
@@ -340,6 +318,52 @@ class NewTab(BaseTab):
         else:
             print("비디오 추출 탭: 선택 구간 테이블이 존재하지 않음")
 
+    def create_settings_sections(self):
+        """저장 설정 섹션 생성"""
+
+        # 메인 타이틀
+        main_title = ttk.Label(self.setting_help_freme,
+                               text="저장 설정",
+                               font=("Arial", 13, "bold")
+                               )
+        main_title.pack(fill=ttk.X, padx=10, pady=(10, 5), anchor="w")
+
+        # CSV 파일명 설정 섹션
+        csv_frame = ttk.Frame(self.setting_help_freme)
+        csv_frame.pack(fill=ttk.X, padx=10, pady=10)
+        # 섹션 타이틀
+        csv_manual = ttk.Label(
+            csv_frame, text="CSV 파일명 설정", font=("Arial", 11, "bold"))
+        csv_manual.pack(fill=ttk.X, pady=5, anchor="w")
+
+        # csv 파일명 설명하는 도움말 레이블
+        csv_help = ttk.Label(csv_frame,
+                             text="ⓘ csv 내보내기 시, 자동으로 생성되는 파일명이 어떻게 생성되는지 확인할 수 있습니다.",
+                             font=("Arial", 10),
+                             foreground="gray"
+                             )
+        csv_help.pack(fill=ttk.X, pady=(10, 10), anchor="w")
+
+        # 파일명 조합 설명
+        filename_format = ttk.Label(csv_frame,
+                                    text="파일명 조합: [비디오명]_구간데이터_[구간수]개_[날짜].csv",
+                                    font=("Arial", 9)
+                                    )
+        filename_format.pack(fill=ttk.X, pady=(10, 2), anchor="w")
+
+        # 예시 설명
+        example_text = ttk.Label(csv_frame,
+                                 text="예시: 홍길동_구간데이터_5개_20250606.csv",
+                                 font=("Arial", 9),
+                                 foreground="gray"
+                                 )
+        example_text.pack(fill=ttk.X, pady=(10, 5), anchor="w")
+
+        # 구분선
+        separator1 = ttk.Separator(
+            self.setting_help_freme, orient="horizontal")
+        separator1.pack(fill=ttk.X, pady=(10, 5))
+
     def extract_selected_segment(self):
         """선택된 구간 추출"""
         try:
@@ -403,28 +427,19 @@ class NewTab(BaseTab):
             messagebox.showerror("오류", f"추출 준비 중 오류: {str(e)}")
 
     def update_progress(self, value, status="", icon="⚡"):
-        """진행률 업데이트 (개선된 버전)"""
+        """진행률 업데이트 (main_tab 스타일)"""
         self.progress_bar['value'] = value
         self.progress_percentage.config(text=f"{int(value)}%")
 
+        # 상태 메시지 업데이트
         if status:
-            self.progress_status.config(text=status)
-
-        # 아이콘 변경
-        if icon:
-            self.progress_icon.config(text=icon)
-
-        # 진행률에 따른 색상 변경
-        if value == 0:
-            self.progress_icon.config(foreground="#999999")
-            self.progress_status.config(text="대기 중...")
-        elif value < 50:
-            self.progress_icon.config(foreground="#FF6B35")
+            self.progress_status.config(text=f"ⓘ {status}")
+        elif value == 0:
+            self.progress_status.config(text="ⓘ 작업 대기 중입니다.")
         elif value < 100:
-            self.progress_icon.config(foreground="#FFA500")
+            self.progress_status.config(text=f"ⓘ 작업 진행 중... ({int(value)}%)")
         else:
-            self.progress_icon.config(foreground="#4CAF50")
-            self.progress_status.config(text="비디오 추출 완료!")
+            self.progress_status.config(text="ⓘ 작업이 완료되었습니다!")
 
     def _do_extraction(self, input_path, output_path, segment_info):
         """실제 추출 작업 (백그라운드)"""
