@@ -1,10 +1,11 @@
+import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox, filedialog
 import os
-from utils.utils import VideoUtils
 import csv
 from datetime import datetime
+from utils.utils import VideoUtils
 
 
 class SegmentTable:
@@ -220,7 +221,18 @@ class SegmentTable:
         current_value = values[column_id]
 
         if self.entry_edit is None:
-            self.entry_edit = ttk.Entry(self.table)
+            # tkinter Entry 사용하여 텍스트 색상 문제 해결
+            self.entry_edit = tk.Entry(
+                self.table,
+                bg='white',           # 배경색 흰색
+                fg='black',           # 텍스트 색상 검은색
+                insertbackground='black',  # 커서 색상 검은색
+                selectbackground='#0078d4',  # 선택 영역 배경색
+                selectforeground='white',    # 선택 영역 텍스트 색상
+                relief='solid',
+                borderwidth=1,
+                font=('Arial', 10)
+            )
             self.entry_edit.bind('<Return>', lambda e: self.save_edit())
             self.entry_edit.bind('<Escape>', self.cancel_edit)
             self.entry_edit.bind('<FocusOut>', self.cancel_edit)
@@ -233,10 +245,10 @@ class SegmentTable:
         self.entry_edit.config(validate='key', validatecommand=wordlimit_cmd)
 
         self.entry_edit.place(x=x, y=y, width=width, height=height)
-        self.entry_edit.delete(0, ttk.END)
+        self.entry_edit.delete(0, 'end')  # tk.END 대신 'end' 사용
         self.entry_edit.insert(0, current_value)
         self.entry_edit.focus()
-        self.entry_edit.select_range(0, ttk.END)
+        self.entry_edit.select_range(0, 'end')  # tk.END 대신 'end' 사용
 
     def validate_input(self, value):
         """입력 검증"""

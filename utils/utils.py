@@ -1,6 +1,8 @@
+import os
 import cv2
 import tkinter as tk
 from PIL import Image, ImageTk
+from datetime import datetime
 
 
 class VideoUtils:
@@ -170,3 +172,41 @@ class VideoUtils:
         except Exception as e:
             print(f"비디오 초기화 실패: {str(e)}")
             return None, None
+
+    @staticmethod
+    def get_file_info(file_path):
+        """파일 정보 가져오기 (비디오 속성 + 파일 기본 정보)"""
+        try:
+            # 비디오 속성 가져오기
+            cap = cv2.VideoCapture(file_path)
+            if not cap.isOpened():
+                return None, "원본 비디오 파일을 열 수 없습니다."
+
+            props = VideoUtils.get_video_properties(cap)
+            if not props:
+                cap.release()
+                return None, "비디오 속성을 가져오는 중 오류 발생"
+
+            # 파일 기본 정보
+            file_stats = os.stat(file_path)
+
+            # 파일 크기를 읽기 쉬운 형식으로 변환
+            def format_size(size):
+                for unit in ['B', 'KB', 'MB', 'GB']:
+                    if size < 1024:
+                        return f"{size:.1f} {unit}"
+                    size /= 1024
+                return f"{size:.1f} TB"
+
+            file_info = {
+                'video_props': props,
+                'file_name': os.path.basename(file_path),
+                'file_path': file_path,
+                'file_size': format_size(file_stats.st_size)
+            }
+
+            cap.release()
+            return file_info, None
+
+        except Exception as e:
+            return None, f"파일 정보를 불러오는 중 오류 발생: {str(e)}"
