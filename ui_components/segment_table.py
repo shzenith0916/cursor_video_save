@@ -233,9 +233,12 @@ class SegmentTable:
                 borderwidth=1,
                 font=('Arial', 10)
             )
+            # 엔터키 편집내용 저장.
             self.entry_edit.bind('<Return>', lambda e: self.save_edit())
             self.entry_edit.bind('<Escape>', self.cancel_edit)
-            self.entry_edit.bind('<FocusOut>', self.cancel_edit)
+            self.entry_edit.bind(
+                '<FocusOut>', lambda e: self.save_edit())  # 기존 CANCEL_EDIT에 BIND. 수정 완료.
+            # 마우스로 포커스 아웃시 편집내용 저장.
 
         x, y, width, height = self.table.bbox(item, column)
         if x is None:
@@ -264,11 +267,19 @@ class SegmentTable:
             self.table.item(self.editing_item, values=values)
 
             item_index = self.table.index(self.editing_item)
+            print(
+                f"🔍 save_edit 디버깅: column_index={column_index}, item_index={item_index}, new_value='{new_value}'")
+
             if hasattr(self.app, 'saved_segments') and item_index < len(self.app.saved_segments):
-                if column_index == 5:  # PAS
+                print(f"🔍 saved_segments 길이: {len(self.app.saved_segments)}")
+                if column_index == 5:  # 의견1 (PAS)
                     self.app.saved_segments[item_index]['opinion1'] = new_value
-                elif column_index == 6:  # 잔여물
+                    print(f"의견1 저장됨: '{new_value}'")
+                elif column_index == 6:  # 의견2 (잔여물)
                     self.app.saved_segments[item_index]['opinion2'] = new_value
+                    print(f"의견2 저장됨: '{new_value}'")
+                else:
+                    print(f"알 수 없는 컬럼 인덱스: {column_index}")
 
             self.cancel_edit()
 
