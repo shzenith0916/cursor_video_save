@@ -493,29 +493,36 @@ class VideoEditorApp:
                     "경고", "올바른 구간을 선택해주세요.\n시작 시간이 종료 시간보다 늦습니다.")
             return False
 
-        # 비디오 경로 처리
+        # 비디오 경로 처리 (공통 메서드 사용)
         if not video_path:
-            if hasattr(self, 'video_path') and self.video_path:
-                if hasattr(self.video_path, 'get'):
-                    video_path = self.video_path.get()
-                else:
-                    video_path = self.video_path
+            video_path = VideoUtils.get_video_path_from_app(self)
 
         if not video_path:
             if parent_window:
-                messagebox.showwarning(
-                    "경고", "비디오 파일이 선택되지 않았습니다.", parent=parent_window)
+                messagebox.showerror(
+                    "오류", "비디오 파일이 선택되지 않았습니다.", parent=parent_window)
             else:
-                messagebox.showwarning("경고", "비디오 파일이 선택되지 않았습니다.")
+                messagebox.showerror("오류", "비디오 파일이 선택되지 않았습니다.")
             return False
 
-        # 구간 데이터 생성 (원래 코드 빼고, 공통 메서드 사용)
-        new_segment = self._create_segment_data(
+        # 구간 데이터 생성
+        segment_data = self._create_segment_data(
             video_path, self.start_time, self.end_time)
 
-        # 실제 저장은 save_segment에 위임 (중복 제거)
-        # 원래 있던 모든 테이블 업데이트 및 알림 메시지를 save_segment 메서드에서 처리
-        return self.save_segment(new_segment, parent_window=parent_window)
+        # 구간 저장
+        self.saved_segments.append(segment_data)
+        print(f"구간 저장됨: {segment_data}")
+
+        # 모든 테이블 새로고침 (NewTab 포함)
+        self.update_all_tables()
+
+        # 구간 저장 완료 메시지 표시
+        if parent_window:
+            messagebox.showinfo("💡알림", "구간이 저장되었습니다!", parent=parent_window)
+        else:
+            messagebox.showinfo("💡알림", "구간이 저장되었습니다!")
+
+        return True
 
     def update_all_tables(self):
         """모든 탭의 테이블을 업데이트하는 중앙화된 메서드"""

@@ -210,3 +210,49 @@ class VideoUtils:
 
         except Exception as e:
             return None, f"파일 정보를 불러오는 중 오류 발생: {str(e)}"
+
+    @staticmethod
+    def find_input_file(filename, app_instance):
+        """입력 파일 경로 찾기 (공통 메서드)
+
+        Args:
+            filename (str): 파일명 또는 전체 경로
+            app_instance: 앱 인스턴스 (video_path 속성 포함)
+
+        Returns:
+            str or None: 찾은 파일 경로 또는 None
+        """
+        # 절대 경로인 경우 직접 확인
+        if os.path.isabs(filename) and os.path.exists(filename):
+            return filename
+
+        # app_instance의 video_path에서 찾기
+        if hasattr(app_instance, 'video_path') and app_instance.video_path:
+            # StringVar인 경우 get() 메서드 사용
+            if hasattr(app_instance.video_path, 'get'):
+                full_path = app_instance.video_path.get()
+            else:
+                full_path = app_instance.video_path
+
+            # 파일명이 일치하고 파일이 존재하는 경우
+            if full_path and os.path.basename(full_path) == filename and os.path.exists(full_path):
+                return full_path
+
+        return None
+
+    @staticmethod
+    def get_video_path_from_app(app_instance):
+        """앱 인스턴스에서 video_path 가져오기 (StringVar 처리 포함)
+
+        Args:
+            app_instance: 앱 인스턴스
+
+        Returns:
+            str or None: video_path 값 또는 None
+        """
+        if hasattr(app_instance, 'video_path') and app_instance.video_path:
+            if hasattr(app_instance.video_path, 'get'):
+                return app_instance.video_path.get()
+            else:
+                return app_instance.video_path
+        return None
