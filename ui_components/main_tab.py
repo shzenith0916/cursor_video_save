@@ -1,6 +1,8 @@
 import tkinter as tk
 import ttkbootstrap as ttk  # ttkbootstrap으로 변경
 from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
+
+from utils.ui_utils import UiUtils
 from .base_tab import BaseTab
 import os
 from utils.utils import VideoUtils
@@ -10,6 +12,7 @@ from utils.styles import AppStyles
 class MainTab(BaseTab):
     def __init__(self, root, app):
         super().__init__(root, app)  # BaseTab의 __init__ 호출
+        self.root = root
         self._init_variables()  # MainTab 전용 변수 초기화
         self.create_ui()  # MainTab UI 생성
 
@@ -73,7 +76,7 @@ class MainTab(BaseTab):
 
         # 엔트리 박스 크기 조정하여 레이블 바로 옆에 붙이기
         self.videofile_entry = tk.Entry(
-            self.openfile_frame, textvariable=self.app.video_path, width=40)
+            self.openfile_frame, textvariable=self.app.video_path, width=40 * int(UiUtils.get_scaling_factor(self.root)))
         # "we"로 가로 방향을 늘릴 수 있습니다.
         self.videofile_entry.grid(row=0, column=1, padx=(0, 5), sticky="we")
 
@@ -107,7 +110,7 @@ class MainTab(BaseTab):
             비디오 로딩 안할때 백그라운드 컬러는 black"""
         # 비디오 프레임
         self.video_frame = tk.Frame(
-            self.frame, bg="black", width=640, height=360,
+            self.frame, bg="black", width=640 * UiUtils.get_scaling_factor(self.root), height=360 * UiUtils.get_scaling_factor(self.root),
             relief="solid", borderwidth=2)
         self.video_frame.pack(fill='both', expand=True, padx=10, pady=10)
         self.video_frame.pack_propagate(False)

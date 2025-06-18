@@ -1,3 +1,4 @@
+from utils.ui_utils import UiUtils
 from .base_tab import BaseTab
 import tkinter as tk
 import ttkbootstrap as ttk
@@ -16,6 +17,7 @@ import threading
 class NewTab(BaseTab):
     def __init__(self, root, app):
         super().__init__(root, app)  # super()로 BaseTab 상속
+        self.root = root
         self._init_variables()  # NewTab 전용 변수 초기화
         self.create_ui()  # NewTab UI 생성
 
@@ -56,7 +58,7 @@ class NewTab(BaseTab):
         self.segment_table = SegmentTable(self.table_frame, self.app)
 
         # 2) 중간: 파일 정보 + 프로그레스 바 (고정 너비)
-        self.info_frame = ttk.Frame(self.main_frame, width=450)
+        self.info_frame = ttk.Frame(self.main_frame, width=450 * UiUtils.get_scaling_factor(self.root))
         self.info_frame.pack(side=ttk.LEFT, fill=ttk.Y, padx=(5, 5))
         self.info_frame.pack_propagate(False)
 
@@ -135,7 +137,7 @@ class NewTab(BaseTab):
         """파일 정보 섹션 생성"""
 
         # 1) 파일 정보 영역 (고정 높이)
-        file_info_container = ttk.Frame(self.info_frame, height=550)
+        file_info_container = ttk.Frame(self.info_frame, height=550 * UiUtils.get_scaling_factor(self.root))
         file_info_container.pack(fill=ttk.X, pady=(0, 5))
         file_info_container.pack_propagate(False)
 
@@ -156,7 +158,7 @@ class NewTab(BaseTab):
             text="선택한 구간의 파일 정보가 여기에 표시됩니다.",
             justify=ttk.LEFT,
             anchor="nw",
-            wraplength=430,
+            wraplength=430 * UiUtils.get_scaling_factor(self.root),
             font=("Arial", 11)
         )
         self.file_info_label.pack(fill=ttk.X, padx=10, pady=10, anchor="nw")
@@ -229,7 +231,7 @@ class NewTab(BaseTab):
     def create_info_buttons(self):
         """파일 정보 영역 하단 버튼들 생성 - main_tab 스타일 적용"""
         # 버튼 영역 컨테이너 (고정 높이)
-        button_container = ttk.Frame(self.info_frame, height=180)
+        button_container = ttk.Frame(self.info_frame, height=180 * UiUtils.get_scaling_factor(self.root))
         button_container.pack(fill=ttk.X, pady=(0, 5))
         button_container.pack_propagate(False)
 
@@ -272,7 +274,7 @@ class NewTab(BaseTab):
     def create_progress_controls(self):
         """가장 아래에 작업 진행률 생성"""
         # 진행률 영역 컨테이너 (고정 높이)
-        progress_container = ttk.Frame(self.info_frame, height=120)
+        progress_container = ttk.Frame(self.info_frame, height=120 * UiUtils.get_scaling_factor(self.root))
         progress_container.pack(fill=ttk.X, pady=(0, 10))
         progress_container.pack_propagate(False)
 
@@ -507,14 +509,14 @@ class NewTab(BaseTab):
             selected_items = self.segment_table.table.selection()
             if not selected_items:
                 show_warning(self.frame, "경고", "추출할 구간을 선택해주세요.",
-                             width=350, height=150)
+                             width=350 * UiUtils.get_scaling_factor(self.root), height=150 * UiUtils.get_scaling_factor(self.root))
                 return
 
             # 2. 구간 정보 가져오기
             index = self.segment_table.table.index(selected_items[0])
             if index >= len(self.app.saved_segments):
                 show_error(self.frame, "오류", "구간 정보를 찾을 수 없습니다.",
-                           width=350, height=150)
+                           width=350 * UiUtils.get_scaling_factor(self.root), height=150 * UiUtils.get_scaling_factor(self.root))
                 return
 
             segment_info = self.app.saved_segments[index]
@@ -593,11 +595,11 @@ class NewTab(BaseTab):
         if result['success']:
             self.update_progress(100, "추출 완료!", "✅")  # 터미널 표시 디버깅 메세지
             show_success(self.frame, "비디오 추출 완료",
-                         "추출 성공!", width=400, height=180)
+                         "추출 성공!", width=400 * UiUtils.get_scaling_factor(self.root), height=180 * UiUtils.get_scaling_factor(self.root))
         else:
             self.update_progress(0, " 추출 실패", "❌")  # 터미널 표시 디버깅 메세지
             show_error(
-                self.frame, "실패", f"추출 실패: {result['message']}", width=400, height=180)
+                self.frame, "실패", f"추출 실패: {result['message']}", width=400 * UiUtils.get_scaling_factor(self.root), height=180 * UiUtils.get_scaling_factor(self.root))
 
         # 5초 후 진행률 바 초기화
         self.frame.after(5000, lambda: self.update_progress(0, "대기 중...", "⚡"))

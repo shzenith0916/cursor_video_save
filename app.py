@@ -13,13 +13,14 @@ from utils.styles import AppStyles
 from utils.utils import VideoUtils
 from ui_components import create_tabs
 from ui_components.preview_window import PreviewWindow
-
+from utils.ui_utils import UiUtils
 
 class VideoEditorApp:
     def __init__(self, root):
         self.root = root  # root를 self.root로 저장
         self.root.title("비디오 편집기")
-        self.root.geometry("1400x900")
+        system_scale = UiUtils.get_scaling_factor(root)
+        self.root.geometry(f"{int(1400 * system_scale)}x{int(900 * system_scale)}+{0}+{0}")
         self.root.resizable(True, True)
 
         # ttkbootstrap 스타일 객체 생성
