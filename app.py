@@ -10,17 +10,20 @@ import ttkbootstrap as ttk  # ttkbootstrap으로 변경
 from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
 from tkinter import messagebox, filedialog
 from utils.styles import AppStyles
-from utils.utils import VideoUtils
+from utils.utils import VideoUtils, AudioPlayer
 from ui_components import create_tabs
 from ui_components.preview_window import PreviewWindow
 from utils.ui_utils import UiUtils
+from utils.event_system import event_system, Events
+
 
 class VideoEditorApp:
     def __init__(self, root):
         self.root = root  # root를 self.root로 저장
         self.root.title("비디오 편집기")
-        system_scale = UiUtils.get_scaling_factor(root)
-        self.root.geometry(f"{int(1400 * system_scale)}x{int(900 * system_scale)}+{0}+{0}")
+        system_scale = UiUtils.get_scaling_factor_by_dpi(root)
+        self.root.geometry(
+            f"{int(1400 * system_scale)}x{int(900 * system_scale)}+{0}+{0}")
         self.root.resizable(True, True)
 
         # ttkbootstrap 스타일 객체 생성
@@ -40,6 +43,9 @@ class VideoEditorApp:
         self.current_image = None  # show_frame 함수에서 사용할 이미지 참조용용
         self.video_label = None  # 비디오 표시 레이블
 
+        # 오디오 플레이어 초기화
+        self.audio_player = AudioPlayer()
+
         # 구간 선택 변수
         self.start_time = 0
         self.end_time = 0
@@ -49,16 +55,23 @@ class VideoEditorApp:
 
         self.ui = create_tabs(self.root, self)
 
+        # 이벤트 리스너 등록
+        self.setup_event_listeners()
+
         print("App 초기화 완료")
 
-    def open_file(self):
+    def setup_event_listeners(self):
+        """이벤트 리스너 설정"""
+        event_system.subscribe(Events.VIDEO_LOADED, self._on_video_loaded)
+        event_system.subscribe(
+            Events.VIDEO_PLAY_TOGGLE, self.handle_play_toggle)
+        event_system.subscribe(Events.VIDEO_STOP, self.stop_video)
+        event_system.subscribe(Events.SEGMENT_START_SET, self.set_start_time)
+        event_system.subscribe(Events.SEGMENT_END_SET, self.set_end_time)
 
-        file_path = filedialog.askopenfilename(
-            # initialdir="C:/Users/user/Documents/cursor_video_save",
-            title="비디오 파일 선택창",
-            filetypes=[("Video Files", "*.mp4 *.avi")]
-        )
-
+    def _on_video_loaded(self, **kwargs):
+        """비디오 로드 이벤트 처리"""
+        file_path = kwargs.get('path')
         if file_path:
             self.video_path = file_path
             if self.initialize_video():
@@ -82,6 +95,19 @@ class VideoEditorApp:
 
         print(f"Video opened: {self.cap.isOpened()}")  # 비디오 열기 성공 여부
         self.show_frame(0)
+        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # UI 업데이트 이벤트 발행
+        event_system.emit(Events.UI_UPDATE,
+                          video_path=self.video_path,
+                          duration=self.video_length,
+                          fps=self.fps,
+                          total_frames=self.total_frames)
+
+        # 플레이어 상태 변경 이벤트 발행 (정지 상태, 준비 완료)
+        event_system.emit(Events.PLAYER_STATE_CHANGED,
+                          is_playing=False, is_stopped=True)
+
         return True
 
     def get_video_info(self, video_path):
@@ -131,42 +157,72 @@ class VideoEditorApp:
             print(f"Error: Could not open video file {video_path}")
             return False
 
-    def toggle_play(self):
-        '''비디오 재생/일시정지 버튼 클릭 시 호출'''
-        if not self.is_playing:
-            self.is_playing = True
-            self.play_button.config(text="|| 일시정지")  # 일시정지 아이콘
-            # 재생 중에도 구간 설정 버튼 활성
-            self.set_start_button.config(state=tk.NORMAL)
-            self.set_end_button.config(state=tk.NORMAL)
-            # 재생 중에도 구간저장 버튼 활성 (사용자 요청)
-            self._update_save_button_state()
-            self.update_video()
+    def handle_play_toggle(self, **kwargs):
+        """재생/일시정지 토글 이벤트 처리"""
+        if self.is_playing:
+            self.pause_video()
         else:
+            self.play_video()
+
+    def play_video(self):
+        """비디오 재생"""
+        if not self.is_playing and self.cap:
+            self.is_playing = True
+
+            # 오디오 재생 시작
+            if self.video_path and self.audio_player.is_initialized:
+                # 현재 비디오 위치 가져오기
+                current_pos = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
+                current_time = current_pos / self.fps if self.fps > 0 else 0
+
+                # 오디오 로드 및 재생
+                if self.audio_player.load_audio_from_video(self.video_path, current_time, self.video_length):
+                    self.audio_player.play()
+
+            event_system.emit(Events.PLAYER_STATE_CHANGED,
+                              is_playing=True, is_stopped=False)
+            self.update_frames()
+
+    def pause_video(self):
+        """비디오 일시정지"""
+        if self.is_playing:
             self.is_playing = False
-            self.play_button.config(text="► 재생")  # 재생 아이콘
+
+            # 오디오 일시정지
+            if self.audio_player.is_initialized:
+                self.audio_player.pause()
+
+            # 이 로직은 UI 업데이트 이벤트로 처리되어야 함 -> _on_player_state_changed 메서드에서 처리
+            # self.play_button.config(text="► 재생")  # 재생 아이콘
             # 일시정지 상태에서 구간 설정 버튼 활성화
-            self.set_start_button.config(state=tk.NORMAL)
-            self.set_end_button.config(state=tk.NORMAL)
+            # self.set_start_button.config(state=tk.NORMAL)
+            # self.set_end_button.config(state=tk.NORMAL)
             # 구간이 올바르게 설정되어 있으면 저장 버튼도 활성화
-            self._update_save_button_state()
+            self.update_save_button_state()
+            event_system.emit(Events.PLAYER_STATE_CHANGED,
+                              is_playing=False, is_stopped=False)
 
-    def stop_video(self):
-        """비디오 중지 버튼 클릭시 호출되는 함수로, 비디오를 처음으로 되돌림"""
-        self.is_playing = False
-        self.play_button.config(text="► 재생")
+    def stop_video(self, **kwargs):
+        """비디오 정지"""
+        if self.cap:
+            self.is_playing = False
 
-        # cap이 None이 아닌지 확인 후 처리
-        if self.cap is not None and self.cap.isOpened():
-            # 비디오를 처음으로 되돌리기 위해, 프레임을 0으로 지정
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self.show_frame(0)
+            # 오디오 정지
+            if self.audio_player.is_initialized:
+                self.audio_player.stop()
 
-        # 슬라이더 위치 초기화
-        self.position_slider.set(0)
-        self.position_label.config(text="00:00")
+            event_system.emit(Events.PLAYER_STATE_CHANGED,
+                              is_playing=False, is_stopped=True)
 
-    def update_video(self):
+            # 비디오를 처음으로 되돌리기
+            if self.cap is not None and self.cap.isOpened():
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+            # 슬라이더 위치 초기화 - 이 로직은 UI 업데이트 이벤트로 처리되어야 함 -> _on_player_state_changed 메서드에서 처리
+            # self.position_slider.set(0)
+            # self.position_label.config(text="00:00")
+
+    def update_frames(self):
         """비디오 프레임 업데이트"""
         if self.is_playing and self.cap is not None and self.cap.isOpened():
             ret, frame = self.cap.read()
@@ -191,7 +247,7 @@ class VideoEditorApp:
 
                 # 다음 프레임 예약
                 delay = int(1000 / self.fps)
-                self.root.after(delay, self.update_video)
+                self.root.after(delay, self.update_frames)
 
             else:
                 # 비디오 끝에 다다르면 재생 중지
@@ -242,38 +298,29 @@ class VideoEditorApp:
             import traceback
             traceback.print_exc()  # 상세한 에러 정보
 
-    def _set_time_from_slider(self, is_start_time=True):
-        '''슬라이더에서 시간을 가져와서 시작/종료 시간 설정하는 공통 메서드'''
-        value = float(self.position_slider.get())
+    def set_start_time(self, time: float):
+        """시작 시간 지정 (이벤트 핸들러)"""
+        self.start_time = time
+        self.start_time_label.config(
+            text=f"구간 시작: {VideoUtils.format_time(int(self.start_time))}")
+        self.update_save_button_state()
 
-        if is_start_time:
-            self.start_time = value
-            self.start_time_label.config(
-                text=f"구간 시작: {VideoUtils.format_time(int(self.start_time))}")
+    def set_end_time(self, time: float):
+        """종료 시간 지정 (이벤트 핸들러)"""
+        self.end_time = time
+        self.end_time_label.config(
+            text=f"구간 종료: {VideoUtils.format_time(int(self.end_time))}"
+        )
+        self.update_save_button_state()
+
+    def update_save_button_state(self):
+        """구간 저장 버튼 활성화/비활성화 상태 업데이트"""
+        # 구간 유효성만 확인 (비디오 로드 시 이미 유효한 초기값이 설정됨)
+        if hasattr(self, 'start_time') and hasattr(self, 'end_time') and \
+           self.start_time < self.end_time:
+            self.save_segment_button.config(state=tk.NORMAL)
         else:
-            self.end_time = value
-            self.end_time_label.config(
-                text=f"구간 종료: {VideoUtils.format_time(int(self.end_time))}")
-
-        # 구간 저장 버튼 상태 업데이트
-        self._update_save_button_state()
-
-    def set_start_time(self):
-        '''시작 시간 지정'''
-        self._set_time_from_slider(is_start_time=True)  # 중복코드를 위의 공통 메서드로 뺌
-
-    def set_end_time(self):
-        '''종료 시간 지정'''
-        self._set_time_from_slider(is_start_time=False)  # 중복코드를 위의 공통 메서드로 뺌
-
-    def _update_save_button_state(self):
-        """구간 저장 버튼 상태 업데이트"""
-        if hasattr(self, 'save_segment_button'):
-            if (hasattr(self, 'start_time') and hasattr(self, 'end_time') and
-                    self.start_time < self.end_time):
-                self.save_segment_button.config(state=tk.NORMAL)
-            else:
-                self.save_segment_button.config(state=tk.DISABLED)
+            self.save_segment_button.config(state=tk.DISABLED)
 
     def select_position(self, value):
         '''슬라이더 값 변경 시 호출되는 함수'''
@@ -313,6 +360,10 @@ class VideoEditorApp:
                 # 실제 현재 시간 계산 (프레임 기반)
                 current_frame = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
                 current_time_secs = current_frame / self.fps
+
+                # 오디오 위치 동기화 (재생 중이 아닐 때만)
+                if not self.is_playing and self.audio_player.is_initialized:
+                    self.audio_player.set_position(current_time_secs)
 
                 # UI 업데이트
                 current_time_str = VideoUtils.format_time(
@@ -422,7 +473,7 @@ class VideoEditorApp:
         self.play_button.config(text="|| 일시정지")
 
         # 비동기 업데이트 시작
-        self.update_video()
+        self.update_frames()
 
     def stop_selection_play(self):
         """구간 재생 중지"""
@@ -465,7 +516,7 @@ class VideoEditorApp:
         return True
 
     # save_current_segment 메서드에서 분리
-    def _create_segment_data(self, video_path, start_time, end_time):
+    def create_segment_data(self, video_path, start_time, end_time):
         """구간 데이터 생성 공통 메서드"""
         return {
             'file': os.path.basename(video_path),
@@ -492,7 +543,7 @@ class VideoEditorApp:
             else:
                 messagebox.showwarning(
                     "경고", "올바른 구간을 선택해주세요.\n시작 시간이 종료 시간보다 늦습니다.")
-            return False
+            return None
 
         # 비디오 경로 처리 (공통 메서드 사용)
         if not video_path:
@@ -504,10 +555,10 @@ class VideoEditorApp:
                     "오류", "비디오 파일이 선택되지 않았습니다.", parent=parent_window)
             else:
                 messagebox.showerror("오류", "비디오 파일이 선택되지 않았습니다.")
-            return False
+            return None
 
         # 구간 데이터 생성
-        segment_data = self._create_segment_data(
+        segment_data = self.create_segment_data(
             video_path, self.start_time, self.end_time)
 
         # 구간 저장
@@ -523,7 +574,7 @@ class VideoEditorApp:
         else:
             messagebox.showinfo("💡알림", "구간이 저장되었습니다!")
 
-        return True
+        return segment_data
 
     def update_all_tables(self):
         """모든 탭의 테이블을 업데이트하는 중앙화된 메서드"""

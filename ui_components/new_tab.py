@@ -7,11 +7,12 @@ from tkinter import messagebox, filedialog
 import os
 import cv2
 from datetime import datetime
-from utils.utils import VideoUtils
+from utils.utils import VideoUtils, show_custom_messagebox
 from .segment_table import SegmentTable
-from function.extractor import VideoExtractor, ExtractConfig
-from utils.custom_dialogs import show_success, show_error, show_warning, ask_confirm
+from extract.extractor import VideoExtractor, ExtractConfig
 import threading
+from .command_handlers import NewTabCommandHandler
+from utils.event_system import event_system, Events
 
 
 class NewTab(BaseTab):
@@ -19,10 +20,94 @@ class NewTab(BaseTab):
         super().__init__(root, app)  # super()로 BaseTab 상속
         self.root = root
         self._init_variables()  # NewTab 전용 변수 초기화
+
+        # NewTab Command handler 초기화
+        self.new_command_handler = NewTabCommandHandler(app)
+        # command_handler에 new_tab 참조 설정
+        self.new_command_handler.set_new_tab(self)
+
         self.create_ui()  # NewTab UI 생성
+        self._setup_event_listeners()  # 이벤트 리스너 설정
 
         # 앱에 NewTab 인스턴스 등록 (PreviewWindow에서 참조할 수 있도록)
         self.app.new_tab_instance = self
+
+    def _setup_event_listeners(self):
+        """이벤트 리스너 설정"""
+
+        # 추출 관련 이벤트 구독
+        event_system.subscribe(Events.EXTRACTION_START,
+                               self._on_extraction_start)
+        event_system.subscribe(Events.EXTRACTION_CANCEL,
+                               self._on_extraction_cancel)
+        event_system.subscribe(Events.EXTRACTION_PROGRESS,
+                               self.update_progress)
+        event_system.subscribe(Events.EXTRACTION_COMPLETE,
+                               self.show_extraction_result)
+        event_system.subscribe(Events.EXTRACTION_ERROR,
+                               self.show_extraction_error)
+
+        # 이미지 추출 관련 이벤트 구독
+        event_system.subscribe(Events.IMAGE_EXTRACTION_START,
+                               self._on_image_extraction_start)
+        event_system.subscribe(Events.IMAGE_EXTRACTION_PROGRESS,
+                               self.update_progress)
+        event_system.subscribe(Events.IMAGE_EXTRACTION_COMPLETE,
+                               self.show_image_extraction_result)
+
+        # 오디오 추출 관련 이벤트 구독
+        event_system.subscribe(Events.AUDIO_EXTRACTION_START,
+                               self._on_audio_extraction_start)
+        event_system.subscribe(Events.AUDIO_EXTRACTION_PROGRESS,
+                               self.update_progress)
+        event_system.subscribe(Events.AUDIO_EXTRACTION_COMPLETE,
+                               self.show_audio_extraction_result)
+        event_system.subscribe(Events.AUDIO_EXTRACTION_ERROR,
+                               self.show_audio_extraction_error)
+
+    def _on_extraction_start(self, segments=None, **kwargs):
+        """추출 시작 이벤트 처리"""
+        # 이미 추출 중이면 무시
+        if hasattr(self, '_is_extracting') and self._is_extracting:
+            return
+
+        self._is_extracting = True
+        self.extract_selected_segment()
+
+    def _on_extraction_cancel(self, **kwargs):
+        """추출 취소 이벤트 처리"""
+        self._is_extracting = False
+        self._is_image_extracting = False  # 이미지 추출도 함께 취소
+        self._is_audio_extracting = False  # 오디오 추출도 함께 취소
+        self.cancel_extraction()
+
+    def _on_image_extraction_start(self, **kwargs):
+        """이미지 추출 시작 이벤트 처리"""
+        print(
+            f"DEBUG: _on_image_extraction_start 호출됨. 현재 이미지 추출 중: "
+            f"{hasattr(self, '_is_image_extracting') and self._is_image_extracting}")
+
+        # 이미 이미지 추출 중이면 무시
+        if hasattr(self, '_is_image_extracting') and self._is_image_extracting:
+            print("DEBUG: 이미 이미지 추출 중이므로 무시")
+            return
+
+        self._is_image_extracting = True
+        self.extract_images()
+
+    def _on_audio_extraction_start(self, **kwargs):
+        """오디오 추출 시작 이벤트 처리"""
+        print(
+            f"DEBUG: _on_audio_extraction_start 호출됨. 현재 오디오 추출 중: "
+            f"{hasattr(self, '_is_audio_extracting') and self._is_audio_extracting}")
+
+        # 이미 오디오 추출 중이면 무시
+        if hasattr(self, '_is_audio_extracting') and self._is_audio_extracting:
+            print("DEBUG: 이미 오디오 추출 중이므로 무시")
+            return
+
+        self._is_audio_extracting = True
+        self.extract_audio()
 
     def _init_variables(self):
         """NewTab 전용 변수 초기화"""
@@ -34,6 +119,11 @@ class NewTab(BaseTab):
         # 구간 추출 관련변수
         self.current_segment = None
         self.extract_config = ExtractConfig()
+
+        # 중복 실행 방지 플래그들
+        self._is_extracting = False
+        self._is_image_extracting = False
+        self._is_audio_extracting = False
 
         # 취소 이벤트 (백그라운드 작업 중단용)
         self.cancel_event = threading.Event()
@@ -58,7 +148,8 @@ class NewTab(BaseTab):
         self.segment_table = SegmentTable(self.table_frame, self.app)
 
         # 2) 중간: 파일 정보 + 프로그레스 바 (고정 너비)
-        self.info_frame = ttk.Frame(self.main_frame, width=450 * UiUtils.get_scaling_factor(self.root))
+        self.info_frame = ttk.Frame(
+            self.main_frame, width=int(450 * UiUtils.get_scaling_factor_by_dpi(self.root)))
         self.info_frame.pack(side=ttk.LEFT, fill=ttk.Y, padx=(5, 5))
         self.info_frame.pack_propagate(False)
 
@@ -76,68 +167,12 @@ class NewTab(BaseTab):
         # 콜백 설정
         self.segment_table.selection_callback = self.on_segment_selected
 
-        # 임시: 프레임 크기 측정 코드 (UI 렌더링 후 실행)
-        self.frame.after(500, self.measure_frame_sizes)
-
-    def measure_frame_sizes(self):
-        """프레임 크기 측정 (임시 디버깅용)"""
-        print("=" * 50)
-        print("프레임 크기 측정 결과:")
-        print("=" * 50)
-
-        # 메인 프레임들
-        if hasattr(self, 'main_frame'):
-            print(
-                f"메인 프레임: {self.main_frame.winfo_width()} x {self.main_frame.winfo_height()}")
-
-        if hasattr(self, 'table_frame'):
-            print(
-                f"테이블 프레임: {self.table_frame.winfo_width()} x {self.table_frame.winfo_height()}")
-
-        if hasattr(self, 'info_frame'):
-            print(
-                f"정보 프레임: {self.info_frame.winfo_width()} x {self.info_frame.winfo_height()}")
-
-        if hasattr(self, 'setting_help_freme'):
-            print(
-                f"설정 프레임: {self.setting_help_freme.winfo_width()} x {self.setting_help_freme.winfo_height()}")
-
-            # info_frame 내부 컨테이너들 (현재 고정 높이가 설정된 프레임들)
-        print("\ninfo_frame 내부 컨테이너들:")
-        info_children = self.info_frame.winfo_children()
-        for i, child in enumerate(info_children):
-            if isinstance(child, ttk.Frame):
-                width = child.winfo_width()
-                height = child.winfo_height()
-                req_width = child.winfo_reqwidth()
-                req_height = child.winfo_reqheight()
-
-                # 특정 컨테이너 식별을 위한 추가 정보
-                container_name = "알 수 없음"
-                if hasattr(child, 'winfo_children'):
-                    children = child.winfo_children()
-                    if children:
-                        first_child = children[0]
-                        if isinstance(first_child, ttk.Label):
-                            label_text = first_child.cget('text')
-                            if "📁 파일 정보" in str(label_text):
-                                container_name = "파일 정보 컨테이너"
-                            elif "⚡ 작업 진행률" in str(label_text):
-                                container_name = "진행률 컨테이너"
-                        elif isinstance(first_child, ttk.Separator):
-                            # separator로 시작하는 경우 버튼 컨테이너일 가능성
-                            container_name = "버튼 컨테이너"
-
-                print(
-                    f"  {container_name} ({i+1}): 실제크기 {width}x{height}, 요청크기 {req_width}x{req_height}")
-
-        print("=" * 50)
-
     def create_info_section(self):
         """파일 정보 섹션 생성"""
 
         # 1) 파일 정보 영역 (고정 높이)
-        file_info_container = ttk.Frame(self.info_frame, height=550 * UiUtils.get_scaling_factor(self.root))
+        file_info_container = ttk.Frame(
+            self.info_frame, height=int(550 * UiUtils.get_scaling_factor_by_dpi(self.root)))
         file_info_container.pack(fill=ttk.X, pady=(0, 5))
         file_info_container.pack_propagate(False)
 
@@ -158,7 +193,7 @@ class NewTab(BaseTab):
             text="선택한 구간의 파일 정보가 여기에 표시됩니다.",
             justify=ttk.LEFT,
             anchor="nw",
-            wraplength=430 * UiUtils.get_scaling_factor(self.root),
+            wraplength=int(430 * UiUtils.get_scaling_factor_by_dpi(self.root)),
             font=("Arial", 11)
         )
         self.file_info_label.pack(fill=ttk.X, padx=10, pady=10, anchor="nw")
@@ -231,7 +266,8 @@ class NewTab(BaseTab):
     def create_info_buttons(self):
         """파일 정보 영역 하단 버튼들 생성 - main_tab 스타일 적용"""
         # 버튼 영역 컨테이너 (고정 높이)
-        button_container = ttk.Frame(self.info_frame, height=180 * UiUtils.get_scaling_factor(self.root))
+        button_container = ttk.Frame(
+            self.info_frame, height=int(180 * UiUtils.get_scaling_factor_by_dpi(self.root)))
         button_container.pack(fill=ttk.X, pady=(0, 5))
         button_container.pack_propagate(False)
 
@@ -246,9 +282,9 @@ class NewTab(BaseTab):
         # 비디오 추출 버튼 (3Pastel 스타일)
         self.video_extract_button = ttk.Button(
             button_frame,
-            text="🎬 비디오 추출",
+            text="비디오 추출",
             style='3Pastel.TButton',
-            command=self.extract_selected_segment
+            command=self.new_command_handler.on_extract_segments
         )
         self.video_extract_button.pack(
             pady=5, padx=5, fill=ttk.X, expand=True)
@@ -258,23 +294,24 @@ class NewTab(BaseTab):
             button_frame,
             text="이미지 추출",
             style='3Pastel.TButton',
-            command=self.extract_images
+            command=self.new_command_handler.on_extract_images
         )
         self.image_extract_button.pack(pady=5, padx=5, fill=ttk.X, expand=True)
 
         # 취소 버튼 (3Pastel 스타일)
         self.cancel_button = ttk.Button(
             button_frame,
-            text="❌ 작업 취소",
+            text="작업 취소",
             style='3Pastel.TButton',
-            command=self.cancel_extraction
+            command=self.new_command_handler.on_cancel_extraction
         )
         self.cancel_button.pack(pady=5, padx=5, fill=ttk.X, expand=True)
 
     def create_progress_controls(self):
         """가장 아래에 작업 진행률 생성"""
         # 진행률 영역 컨테이너 (고정 높이)
-        progress_container = ttk.Frame(self.info_frame, height=120 * UiUtils.get_scaling_factor(self.root))
+        progress_container = ttk.Frame(
+            self.info_frame, height=int(120 * UiUtils.get_scaling_factor_by_dpi(self.root)))
         progress_container.pack(fill=ttk.X, pady=(0, 10))
         progress_container.pack_propagate(False)
 
@@ -508,15 +545,15 @@ class NewTab(BaseTab):
             # 1. 선택 확인
             selected_items = self.segment_table.table.selection()
             if not selected_items:
-                show_warning(self.frame, "경고", "추출할 구간을 선택해주세요.",
-                             width=350 * UiUtils.get_scaling_factor(self.root), height=150 * UiUtils.get_scaling_factor(self.root))
+                show_custom_messagebox(
+                    self.frame, "경고", "추출할 구간을 선택해주세요.", "warning")
                 return
 
             # 2. 구간 정보 가져오기
             index = self.segment_table.table.index(selected_items[0])
             if index >= len(self.app.saved_segments):
-                show_error(self.frame, "오류", "구간 정보를 찾을 수 없습니다.",
-                           width=350 * UiUtils.get_scaling_factor(self.root), height=150 * UiUtils.get_scaling_factor(self.root))
+                show_custom_messagebox(
+                    self.frame, "오류", "구간 정보를 찾을 수 없습니다.", "warning")
                 return
 
             segment_info = self.app.saved_segments[index]
@@ -525,12 +562,14 @@ class NewTab(BaseTab):
             input_path = VideoUtils.find_input_file(
                 segment_info['file'], self.app)
             if not input_path:
-                messagebox.showerror("오류", "원본 비디오 파일을 찾을 수 없습니다.")
+                show_custom_messagebox(
+                    self.frame, "오류", "원본 비디오 파일을 찾을 수 없습니다.", "warning")
                 return
 
             # 4. 출력 파일 선택
             default_filename = self.extract_config.generate_filename(
                 segment_info)
+
             output_path = filedialog.asksaveasfilename(
                 title="저장할 위치 선택",
                 defaultextension=".mp4",
@@ -552,7 +591,8 @@ class NewTab(BaseTab):
             ).start()
 
         except Exception as e:
-            messagebox.showerror("오류", f"추출 준비 중 오류: {str(e)}")
+            show_custom_messagebox(
+                self.frame, "오류", f"추출 준비 중 오류: {str(e)}", "warning")
 
     def do_extraction(self, input_path, output_path, segment_info):
         """실제 추출 작업 (백그라운드)"""
@@ -566,7 +606,6 @@ class NewTab(BaseTab):
                 return
 
             # 시작 상태 업데이트
-            # 0이므로 즉시 실행, 만약 0이 아니고 2000이면 2초후 실행행
             self.update_progress_safe(0, "추출 시작...", "시작...")
 
             # VideoExtractor로 추출
@@ -592,31 +631,44 @@ class NewTab(BaseTab):
 
     def show_extraction_result(self, result):
         """추출 결과 표시"""
+        # 추출 완료 후 플래그 리셋
+        self._is_extracting = False
+
         if result['success']:
-            self.update_progress(100, "추출 완료!", "✅")  # 터미널 표시 디버깅 메세지
-            show_success(self.frame, "비디오 추출 완료",
-                         "추출 성공!", width=400 * UiUtils.get_scaling_factor(self.root), height=180 * UiUtils.get_scaling_factor(self.root))
+            self.update_progress(100, "추출 완료!", "✅")
+            show_custom_messagebox(
+                self.frame, "비디오 추출 완료", "추출 성공!", "success")
+
         else:
-            self.update_progress(0, " 추출 실패", "❌")  # 터미널 표시 디버깅 메세지
-            show_error(
-                self.frame, "실패", f"추출 실패: {result['message']}", width=400 * UiUtils.get_scaling_factor(self.root), height=180 * UiUtils.get_scaling_factor(self.root))
+            self.update_progress(0, " 추출 실패", "❌")
+            show_custom_messagebox(
+                self.frame, "실패", f"추출 실패: {result['message']}", "error")
 
         # 5초 후 진행률 바 초기화
         self.frame.after(5000, lambda: self.update_progress(0, "대기 중...", "⚡"))
 
     def show_extraction_error(self, error):
         """추출 오류 표시"""
-        self.update_progress(0, "오류 발생", "⚠️")
-        messagebox.showerror("오류", f"추출 중 오류: {str(error)}")
+        # 추출 오류 후 플래그 리셋
+        self._is_extracting = False
 
-    def update_progress_safe(self, value, status="", icon="⚡"):
+        self.update_progress(0, "오류 발생", "⚠️")
+        show_custom_messagebox(
+            self.frame, "오류", f"추출 중 오류: {str(error)}", "warning")
+
+    def update_progress_safe(self, value, status="", icon="⚡", **kwargs):  # 백그라운드 작업
         """스레드 안전한 진행률 업데이트 헬퍼 메서드"""
         self.frame.after(0, lambda: self.update_progress(value, status, icon))
 
-    def update_progress(self, value, status="", icon="⚡"):
+    def update_progress(self, value=0, status="", icon="⚡", **kwargs):  # 프론트엔드 작업
         """진행률 업데이트 (main_tab 스타일)"""
-        self.progress_bar['value'] = value
-        self.progress_percentage.config(text=f"{int(value)}%")
+        # 키워드 인수로 progress가 전달된 경우 value로 사용
+        if 'progress' in kwargs:
+            value = kwargs['progress']
+
+        if value is not None:
+            self.progress_bar['value'] = value
+            self.progress_percentage.config(text=f"{int(value)}%")
 
         # 상태 메시지 업데이트
         if status:
@@ -625,14 +677,17 @@ class NewTab(BaseTab):
             self.progress_status.config(text="ⓘ 작업 대기 중입니다.")
         elif value < 100:
             self.progress_status.config(text=f"ⓘ 작업 진행 중... ({int(value)}%)")
-        else:
+        elif value == 100:
             self.progress_status.config(text="ⓘ 작업이 완료되었습니다!")
 
     def cancel_extraction(self):
         """추출 취소"""
         self.cancel_event.set()  # 취소 신호 전송
-        self.update_progress(0, "취소됨", "취소")
+        self.update_progress(0, "취소됨", "❌")
         print("❌ 추출 취소 신호 전송됨")  # 터미널 표시 디버깅 메세지
+
+        show_custom_messagebox(
+            self.frame, "추출 취소", "사용자에 의해 추출이 취소되었습니다.", "error")
 
     def extract_images(self):
         """선택된 구간에서 이미지 추출 (FPS 기반 스킵)"""
@@ -640,179 +695,332 @@ class NewTab(BaseTab):
             # 취소 이벤트 초기화
             self.cancel_event.clear()
 
-            # 1. 선택 확인
-            selected_items = self.segment_table.table.selection()
-            if not selected_items:
-                messagebox.showwarning("경고", "이미지를 추출할 구간을 선택해주세요.")
+            # 1. 선택된 구간 정보 가져오기
+            segment_info = self._get_selected_segment_info()
+            if not segment_info:
                 return
 
-            # 2. 구간 정보 가져오기
-            index = self.segment_table.table.index(selected_items[0])
-            if index >= len(self.app.saved_segments):
-                messagebox.showerror("오류", "구간 정보를 찾을 수 없습니다.")
-                return
-
-            segment_info = self.app.saved_segments[index]
-
-            # 3. 입력 파일 찾기 (공통 메서드 사용)
-            input_path = VideoUtils.find_input_file(
-                segment_info['file'], self.app)
+            # 2. 입력 파일 찾기
+            input_path = self._find_input_file(segment_info)
             if not input_path:
-                messagebox.showerror("오류", "원본 비디오 파일을 찾을 수 없습니다.")
                 return
 
-            # 4. 폴더 생성 위치 선택
-            base_filename = os.path.splitext(os.path.basename(input_path))[0]
-            timestamp = datetime.now().strftime("%y%m%d")  # YYMMDD 형식
-
-            # 시작/종료 시간을 파일명에 포함
-            start_time_str = VideoUtils.format_time(
-                segment_info['start']).replace(':', '-')
-            end_time_str = VideoUtils.format_time(
-                segment_info['end']).replace(':', '-')
-
-            # 폴더명 생성: [비디오명]_[시작시간]_[종료시간]_[날짜]
-            folder_name = f"{base_filename}_{start_time_str}_{end_time_str}_{timestamp}"
-
-            # 기본 저장 경로 (바탕화면 또는 문서 폴더)
-            default_path = os.path.expanduser("~/Desktop")
-            if not os.path.exists(default_path):
-                default_path = os.path.expanduser("~/Documents")
-
-            # 사용자가 폴더 생성 위치 선택
-            output_base_folder = filedialog.askdirectory(
-                title="이미지 저장할 기본 폴더 선택",
-                initialdir=default_path
-            )
-            if not output_base_folder:
+            # 3. 출력 폴더 설정
+            output_folder = self._setup_output_folder(input_path, segment_info)
+            if not output_folder:
                 return
 
-            output_folder = os.path.join(output_base_folder, folder_name)
-
-            # 폴더가 이미 존재하는지 확인
-            if os.path.exists(output_folder):
-                response = messagebox.askyesno(
-                    "폴더 존재",
-                    f"폴더 '{folder_name}'이 이미 존재합니다.\n기존 폴더에 추가하시겠습니까?"
-                )
-                if not response:
-                    return
-            else:
-                # 폴더 생성
-                try:
-                    os.makedirs(output_folder, exist_ok=True)
-                except Exception as e:
-                    messagebox.showerror("오류", f"폴더 생성 실패: {str(e)}")
-                    return
-
-            # 5. 이미지 추출 시작
-            print(f"이미지 추출 시작: {segment_info['start']}~{segment_info['end']}초")
-            print(f"저장 폴더: {output_folder}")
-            self.update_progress_safe(0, "이미지 추출 중...", "🔄")
-
-            # 스레딩을 사용하여 백그라운드에서 이미지 추출 시작
-            threading.Thread(
-                target=self.do_image_extraction,
-                args=(input_path, output_folder, segment_info),
-                daemon=True
-            ).start()
+            # 4. 이미지 추출 시작
+            self._start_image_extraction(
+                input_path, output_folder, segment_info)
 
         except Exception as e:
-            messagebox.showerror("오류", f"이미지 추출 준비 중 오류: {str(e)}")
+            show_custom_messagebox(
+                self.frame, "오류", f"이미지 추출 준비 중 오류: {str(e)}", "error")
+
+    def _get_selected_segment_info(self):
+        """선택된 구간 정보 가져오기"""
+        # 선택 확인
+        selected_items = self.segment_table.table.selection()
+        if not selected_items:
+            show_custom_messagebox(
+                self.frame, "경고", "이미지를 추출할 구간을 선택해주세요.", "warning")
+            return None
+
+        # 구간 정보 가져오기
+        index = self.segment_table.table.index(selected_items[0])
+        if index >= len(self.app.saved_segments):
+            show_custom_messagebox(
+                self.frame, "오류", "구간 정보를 찾을 수 없습니다.", "error")
+            return None
+
+        return self.app.saved_segments[index]
+
+    def _find_input_file(self, segment_info):
+        """입력 파일 찾기"""
+        input_path = VideoUtils.find_input_file(segment_info['file'], self.app)
+        if not input_path:
+            show_custom_messagebox(
+                self.frame, "오류", "원본 비디오 파일을 찾을 수 없습니다.", "error")
+            return None
+        return input_path
+
+    def _setup_output_folder(self, input_path, segment_info):
+        """출력 폴더 설정"""
+        # 폴더명 생성
+        folder_name = VideoUtils.generate_output_folder_name(
+            input_path, segment_info['start'], segment_info['end'])
+
+        # 기본 저장 경로
+        default_path = VideoUtils.get_default_save_path()
+
+        # 사용자가 폴더 생성 위치 선택
+        output_base_folder = filedialog.askdirectory(
+            title="이미지 저장할 기본 폴더 선택",
+            initialdir=default_path
+        )
+        if not output_base_folder:
+            # 사용자가 취소한 경우 기본 경로 사용
+            output_base_folder = default_path
+
+        output_folder = os.path.join(output_base_folder, folder_name)
+
+        # 폴더 존재 확인 및 생성
+        if not self._create_output_folder(output_folder, folder_name):
+            return None
+
+        return output_folder
+
+    def _create_output_folder(self, output_folder, folder_name):
+        """출력 폴더 생성"""
+        if os.path.exists(output_folder):
+            response = messagebox.askyesno(
+                "폴더 존재",
+                f"폴더 '{folder_name}'이 이미 존재합니다.\n기존 폴더에 추가하시겠습니까?"
+            )
+            if not response:
+                return False
+        else:
+            try:
+                os.makedirs(output_folder, exist_ok=True)
+            except Exception as e:
+                show_custom_messagebox(
+                    self.frame, "오류", f"폴더 생성 실패: {str(e)}", "error")
+                return False
+        return True
+
+    def _start_image_extraction(self, input_path, output_folder, segment_info):
+        """이미지 추출 시작 프론트 엔드"""
+
+        print(f"이미지 추출 시작: {segment_info['start']}~{segment_info['end']}초")
+        print(f"저장 폴더: {output_folder}")
+
+        # 진행률 시작 이벤트 emit (0% 진행률로 시작)
+        event_system.emit(
+            Events.IMAGE_EXTRACTION_PROGRESS,
+            progress=0,
+            status="이미지 추출 준비 중...",
+            icon="🔄"
+        )
+
+        # 스레딩을 사용하여 백그라운드에서 이미지 추출 시작
+        threading.Thread(
+            target=self.do_image_extraction,
+            args=(input_path, output_folder, segment_info),
+            daemon=True
+        ).start()
 
     def do_image_extraction(self, input_path, output_folder, segment_info):
-        """실제 이미지 추출 작업 (백그라운드)"""
+        """실제 이미지 추출 작업 (백그라운드) - 공통 유틸리티 사용"""
         try:
-            # 비디오 캡처 초기화
-            cap = cv2.VideoCapture(input_path)
-            if not cap.isOpened():
-                raise Exception("비디오 파일을 열 수 없습니다.")
+            # 공통 유틸리티를 사용하여 프레임 추출
+            result = VideoUtils.extract_frames_from_video(
+                input_path=input_path,
+                output_folder=output_folder,
+                start_time=segment_info['start'],
+                end_time=segment_info['end'],
+                progress_callback=self._image_progress_callback,  # 밑의 콜백 함수 호출
+                cancel_event=self.cancel_event
+            )
 
-            try:
-                # 비디오 정보 가져오기
-                fps = cap.get(cv2.CAP_PROP_FPS)
-
-                # FPS에 따른 프레임 스킵 계산
-                frame_skip = 2 if fps >= 30 else 1  # 30fps 이상이면 매 2번째 프레임만
-                print(f"비디오 FPS: {fps:.2f}, 프레임 스킵: {frame_skip}")
-
-                # 시작/끝 프레임 계산
-                start_frame = int(segment_info['start'] * fps)
-                end_frame = int(segment_info['end'] * fps)
-
-                # 추출할 프레임 목록 생성 (스킵 적용)
-                frames_to_extract = list(
-                    range(start_frame, end_frame, frame_skip))
-                total_extract_frames = len(frames_to_extract)
-
-                if total_extract_frames == 0:
-                    raise Exception("추출할 프레임이 없습니다.")
-
-                print(f"추출할 프레임: {total_extract_frames}개 (스킵: {frame_skip})")
-
-                # 파일명 prefix 생성
-                base_filename = os.path.splitext(
-                    os.path.basename(input_path))[0]
-                timestamp = datetime.now().strftime("%Y%m%d")
-
-                extracted_count = 0
-                progress_update_interval = max(
-                    1, total_extract_frames // 20)  # 20번만 업데이트
-
-                for i, frame_num in enumerate(frames_to_extract):
-                    # 취소 확인 (매 프레임마다)
-                    if self.cancel_event.is_set():
-                        self.update_progress_safe(0, "이미지 추출 취소됨", "❌")
-                        return
-
-                    # 프레임 위치로 이동
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-                    ret, frame = cap.read()
-
-                    if not ret:
-                        print(f"⚠️ 프레임 {frame_num} 읽기 실패")
-                        continue
-
-                    # 파일명 생성: [비디오명]_[날짜]_[프레임번호].jpg
-                    image_filename = f"{base_filename}_{timestamp}_frame{frame_num:06d}.jpg"
-                    image_path = os.path.join(output_folder, image_filename)
-
-                    # 이미지 저장
-                    cv2.imwrite(image_path, frame)
-                    extracted_count += 1
-
-                    # 진행률 업데이트 (성능 최적화: 일정 간격으로만)
-                    if i % progress_update_interval == 0 or i == total_extract_frames - 1:
-                        progress = (i + 1) / total_extract_frames * 100
-                        self.update_progress_safe(
-                            progress, f"이미지 {extracted_count}/{total_extract_frames} 저장 중...", "💾")
-
-                # 완료 메시지
-                self.update_progress_safe(
-                    100, f"{extracted_count}개 이미지 추출 완료!", "✅")
-                self.frame.after(0, lambda: self.show_image_extraction_result(
-                    extracted_count, total_extract_frames, output_folder, fps, frame_skip))
-
-            finally:
-                cap.release()
+            # 취소 여부 확인
+            if self.cancel_event.is_set():
+                return  # 취소된 경우 완료 이벤트를 발생시키지 않음
+            else:
+                # 완료 이벤트 발생
+                self._emit_image_extraction_complete(result, output_folder)
 
         except Exception as e:
-            self.frame.after(0, lambda: self.show_image_extraction_error(e))
+            # 에러 이벤트 발생
+            if not self.cancel_event.is_set():  # 취소가 아닌 실제 오류인 경우만
+                self._emit_image_extraction_error(str(e))
 
-    def show_image_extraction_result(self, extracted_count, total_extract_frames, output_folder, fps, frame_skip):
+    def _image_progress_callback(self, progress, extracted_count, total_frames):
+        """이미지 추출 진행률 콜백"""
+        self.frame.after(0, lambda: event_system.emit(
+            Events.IMAGE_EXTRACTION_PROGRESS,
+            progress=progress,
+            status=f"이미지 {extracted_count}/{total_frames} 저장 중...",
+            icon="💾"
+        ))
+
+    def show_image_extraction_result(self, extracted_count=0, total_extract_frames=0,
+                                     output_folder="", fps=0, frame_skip=0,
+                                     progress=100, status="", icon="✅", **kwargs):
         """이미지 추출 결과 표시"""
-        messagebox.showinfo(
+        # 이미지 추출 완료 후 플래그 리셋
+        self._is_image_extracting = False
+
+        # 진행률 업데이트
+        self.update_progress(progress, status, icon)
+
+        # 결과 다이얼로그 표시
+        show_custom_messagebox(
+            self.frame,
             "✅ 완료",
             f"이미지 추출 완료!\n"
             f"추출된 이미지: {extracted_count}개\n"
-            f"저장 위치: {output_folder}\n"
-            f"프레임 스킵: {frame_skip} (FPS: {fps:.1f})"
+            f"프레임 스킵: {frame_skip} (FPS: {fps:.1f})",
+            "success",
+            # auto_close_ms=3000  # 3초 후 자동 닫기
         )
 
         # 5초 후 진행률 바 초기화
         self.frame.after(5000, lambda: self.update_progress(0, "대기 중...", "⚡"))
 
-    def show_image_extraction_error(self, error):
-        """이미지 추출 오류 표시"""
-        self.update_progress(0, "이미지 추출 실패", "💥")
-        messagebox.showerror("오류", f"이미지 추출 중 오류: {str(error)}")
+    def _emit_image_extraction_complete(self, result, output_folder):
+        """이미지 추출 완료 이벤트 발생"""
+        self.frame.after(0, lambda: event_system.emit(
+            Events.IMAGE_EXTRACTION_COMPLETE,
+            extracted_count=result['extracted_count'],
+            total_extract_frames=result['total_frames'],
+            output_folder=output_folder,
+            fps=result['fps'],
+            frame_skip=result['frame_skip'],
+            progress=100,
+            status=f"{result['extracted_count']}개 이미지 추출 완료!",
+            icon="✅"
+        ))
+
+    def _emit_image_extraction_error(self, error_message):
+        """이미지 추출 오류 이벤트 발생"""
+        self.frame.after(0, lambda: event_system.emit(
+            Events.IMAGE_EXTRACTION_ERROR, error=error_message))
+
+    def extract_audio(self):
+        """선택된 구간에서 오디오 추출"""
+        try:
+            # 취소 이벤트 초기화
+            self.cancel_event.clear()
+
+            # 1. 선택된 구간 정보 가져오기
+            segment_info = self._get_selected_segment_info()
+            if not segment_info:
+                return
+
+            # 2. 입력 파일 찾기
+            input_path = self._find_input_file(segment_info)
+            if not input_path:
+                return
+
+            # 3. 출력 폴더 설정
+            output_folder = self._setup_output_folder(input_path, segment_info)
+            if not output_folder:
+                return
+
+            # 4. 오디오 추출 시작
+            self._start_audio_extraction(
+                input_path, output_folder, segment_info)
+
+        except Exception as e:
+            show_custom_messagebox(
+                self.frame, "오류", f"오디오 추출 준비 중 오류: {str(e)}", "error")
+
+    def _start_audio_extraction(self, input_path, output_folder, segment_info):
+        """오디오 추출 시작 프론트 엔드"""
+
+        print(f"오디오 추출 시작: {segment_info['start']}~{segment_info['end']}초")
+        print(f"저장 폴더: {output_folder}")
+
+        # 진행률 시작 이벤트 emit (0% 진행률로 시작)
+        event_system.emit(
+            Events.AUDIO_EXTRACTION_PROGRESS,
+            progress=0,
+            status="오디오 추출 준비 중...",
+            icon="🔄"
+        )
+
+        # 스레딩을 사용하여 백그라운드에서 오디오 추출 시작
+        threading.Thread(
+            target=self.do_audio_extraction,
+            args=(input_path, output_folder, segment_info),
+            daemon=True
+        ).start()
+
+    def do_audio_extraction(self, input_path, output_folder, segment_info):
+        """실제 오디오 추출 작업 (백그라운드) - 공통 유틸리티 사용"""
+        try:
+            # 공통 유틸리티를 사용하여 오디오 추출
+            result = VideoUtils.extract_audio_from_video(
+                input_path=input_path,
+                output_folder=output_folder,
+                start_time=segment_info['start'],
+                end_time=segment_info['end'],
+                progress_callback=self._audio_progress_callback,  # 밑의 콜백 함수 호출
+                cancel_event=self.cancel_event
+            )
+
+            # 취소 여부 확인
+            if self.cancel_event.is_set():
+                return  # 취소된 경우 완료 이벤트를 발생시키지 않음
+            else:
+                # 완료 이벤트 발생
+                self._emit_audio_extraction_complete(result, output_folder)
+
+        except Exception as e:
+            # 에러 이벤트 발생
+            if not self.cancel_event.is_set():  # 취소가 아닌 실제 오류인 경우만
+                self._emit_audio_extraction_error(str(e))
+
+    def _audio_progress_callback(self, progress, extracted_count, total_frames):
+        """오디오 추출 진행률 콜백"""
+        self.frame.after(0, lambda: event_system.emit(
+            Events.AUDIO_EXTRACTION_PROGRESS,
+            progress=progress,
+            status=f"오디오 {extracted_count}/{total_frames} 저장 중...",
+            icon="💾"
+        ))
+
+    def show_audio_extraction_result(self, extracted_count=0, total_extract_frames=0,
+                                     output_folder="", fps=0, frame_skip=0,
+                                     progress=100, status="", icon="✅", **kwargs):
+        """오디오 추출 결과 표시"""
+        # 오디오 추출 완료 후 플래그 리셋
+        self._is_audio_extracting = False
+
+        # 진행률 업데이트
+        self.update_progress(progress, status, icon)
+
+        # 결과 다이얼로그 표시
+        show_custom_messagebox(
+            self.frame,
+            "✅ 완료",
+            f"오디오 추출 완료!\n"
+            f"추출된 오디오: {extracted_count}개\n"
+            f"프레임 스킵: {frame_skip} (FPS: {fps:.1f})",
+            "success",
+            # auto_close_ms=3000  # 3초 후 자동 닫기
+        )
+
+        # 5초 후 진행률 바 초기화
+        self.frame.after(5000, lambda: self.update_progress(0, "대기 중...", "⚡"))
+
+    def _emit_audio_extraction_complete(self, result, output_folder):
+        """오디오 추출 완료 이벤트 발생"""
+        self.frame.after(0, lambda: event_system.emit(
+            Events.AUDIO_EXTRACTION_COMPLETE,
+            extracted_count=result['extracted_count'],
+            total_extract_frames=result['total_frames'],
+            output_folder=output_folder,
+            fps=result['fps'],
+            frame_skip=result['frame_skip'],
+            progress=100,
+            status=f"{result['extracted_count']}개 오디오 추출 완료!",
+            icon="✅"
+        ))
+
+    def _emit_audio_extraction_error(self, error_message):
+        """오디오 추출 오류 이벤트 발생"""
+        self.frame.after(0, lambda: event_system.emit(
+            Events.AUDIO_EXTRACTION_ERROR, error=error_message))
+
+    def show_audio_extraction_error(self, error=None, **kwargs):
+        """오디오 추출 오류 표시"""
+        # 오디오 추출 오류 후 플래그 리셋
+        self._is_audio_extracting = False
+
+        self.update_progress(0, "오류 발생", "⚠️")
+        error_message = kwargs.get(
+            'error', str(error) if error else "알 수 없는 오류")
+        show_custom_messagebox(
+            self.frame, "오류", f"오디오 추출 중 오류: {error_message}", "error")

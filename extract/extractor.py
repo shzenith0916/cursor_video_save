@@ -179,6 +179,97 @@ class VideoExtractor:
         except:
             return False
 
+    @staticmethod
+    def extract_audio_segment(input_video_path, output_audio_path, start_time, end_time,
+                              progress_callback=None, audio_format='mp3', audio_quality='192k'):
+        """주어진 시간 범위에 해당하는 오디오 세그먼트를 추출하는 함수
+
+        Args:
+            input_video_path (str): 입력 비디오 파일 경로
+            output_audio_path (str): 출력 오디오 파일 경로
+            start_time (str or float): 시작 시간 (HH:MM:SS)
+            end_time (str or float): 종료 시간 (HH:MM:SS)
+            progress_callback (function): 진행률 콜백 함수
+            audio_format (str): 오디오 포맷 (mp3, wav, aac 등)
+            audio_quality (str): 오디오 품질 (192k, 256k, 320k 등)
+        Returns:
+            dict: {'success': bool, 'message': str, 'output_path': str}
+        """
+        try:
+            if not os.path.exists(input_video_path):
+                return {
+                    'success': False,
+                    'message': f"입력 비디오 파일이 존재하지 않습니다: {input_video_path}",
+                    'output_path': None
+                }
+
+            start_time_str = VideoExtractor.format_time_for_ffmpeg(start_time)
+            end_time_str = VideoExtractor.format_time_for_ffmpeg(end_time)
+
+            # 출력 디렉토리 확인 및 생성
+            output_dir = os.path.dirname(output_audio_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            # ffmpeg 명령어 구성 (오디오 추출용)
+            command = VideoExtractor.build_audio_ffmpeg_command(
+                input_video_path,
+                output_audio_path,
+                start_time_str,
+                end_time_str,
+                audio_format,
+                audio_quality
+            )
+
+            # 진행률 콜백 함수 처리
+            if progress_callback:
+                progress_callback("오디오 추출 중...")
+
+            result = VideoExtractor.execute_command(command)
+
+            # output_path 추가
+            if result['success']:
+                result['output_path'] = output_audio_path
+                result['message'] = "오디오 세그먼트 추출 성공"
+
+            return result
+
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f"오디오 추출 중 오류 발생: {e}",
+                'output_path': None
+            }
+
+    @staticmethod
+    def build_audio_ffmpeg_command(input_path, output_path, start_time, end_time,
+                                   audio_format='mp3', audio_quality='192k'):
+        """오디오 추출용 ffmpeg 명령어 구성"""
+        command = [
+            'ffmpeg',
+            '-y',  # 파일 덮어쓰기 허용
+            '-i', input_path,
+            '-ss', str(start_time),
+            '-to', str(end_time),
+            '-vn',  # 비디오 스트림 제외
+            '-acodec', 'libmp3lame' if audio_format == 'mp3' else 'pcm_s16le',
+            '-ab', audio_quality,
+            output_path
+        ]
+
+        return command
+
+    @staticmethod
+    def get_supported_audio_formats():
+        """지원하는 오디오 포맷 반환"""
+        return [
+            ('MP3 파일', '*.mp3'),
+            ('WAV 파일', '*.wav'),
+            ('AAC 파일', '*.aac'),
+            ('OGG 파일', '*.ogg'),
+            ('FLAC 파일', '*.flac')
+        ]
+
 
 class ExtractConfig:
     """구간 추출 설정을 관리하는 클래스"""

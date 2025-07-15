@@ -11,11 +11,11 @@ def create_tabs(parent, app):
     # 노트북 위젯 생성 (탭 컨테이너)
     notebook = ttk.Notebook(parent)
 
-    # 메인 탭 생성 및 추가
+    # 메인 탭 생성 및 추가 (기존 app 인스턴스 전달)
     main_tab = MainTab(notebook, app)
     notebook.add(main_tab.frame, text="메인 탭")
 
-    # New 탭 생성 및 추가
+    # New 탭 생성 및 추가 (기존 app 인스턴스 전달)
     new_tab = NewTab(notebook, app)
     notebook.add(new_tab.frame, text="편집/추출 탭")
     app.new_tab_instance = new_tab  # app에 new_tab 인스턴스 저장

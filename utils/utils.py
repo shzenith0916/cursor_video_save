@@ -1,8 +1,220 @@
 import os
 import cv2
 import tkinter as tk
+from tkinter import messagebox
 from PIL import Image, ImageTk
 from datetime import datetime
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from .ui_utils import UiUtils
+import pygame
+import threading
+import time
+
+
+def show_custom_messagebox(parent, title, message, msg_type="info", auto_close_ms=None):
+    """커스텀 Toplevel 메시지 박스 생성"""
+    dialog = tk.Toplevel(parent)
+    dialog.title(title)
+
+    # DPI 스케일링 적용 및 중앙 정렬
+    width = int(380 * UiUtils.get_scaling_factor_by_dpi(parent))
+    height = int(160 * UiUtils.get_scaling_factor_by_dpi(parent))
+    UiUtils.center_window(dialog, parent, width, height)
+
+    dialog.resizable(False, False)
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    # 아이콘과 색상 설정
+    icon_configs = {
+        "info": {"icon": "ℹ️", "color": "#0d6efd"},
+        "success": {"icon": "✅", "color": "#198754"},
+        "warning": {"icon": "⚠️", "color": "#fd7e14"},
+        "error": {"icon": "❌", "color": "#dc3545"}
+    }
+    icon_config = icon_configs.get(msg_type, icon_configs["info"])
+
+    main_frame = ttk.Frame(dialog)
+    main_frame.pack(fill=BOTH, expand=True, padx=20, pady=15)
+
+    content_frame = ttk.Frame(main_frame)
+    content_frame.pack(fill=BOTH, expand=True, pady=(0, 15))
+
+    icon_label = ttk.Label(
+        content_frame, text=icon_config["icon"], font=("Arial", 24),
+        foreground=icon_config["color"]
+    )
+    icon_label.pack(side=LEFT, padx=(0, 15), anchor='n')
+
+    message_label = ttk.Label(
+        content_frame, text=message, font=("Arial", 11),
+        wraplength=width - 120, justify=LEFT
+    )
+    message_label.pack(side=LEFT, fill=BOTH, expand=True)
+
+    # 확인 버튼 (자동 닫기가 아닐 경우에만 표시)
+    if not auto_close_ms:
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=X)
+        ok_button = ttk.Button(
+            button_frame, text="확인", style="Accent.TButton",
+            command=dialog.destroy, width=10
+        )
+        ok_button.pack(side=RIGHT)
+        dialog.bind('<Return>', lambda e: dialog.destroy())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
+        ok_button.focus_set()
+
+    # 자동 닫기 설정
+    if auto_close_ms:
+        dialog.after(auto_close_ms, dialog.destroy)
+
+    dialog.wait_window()
+
+
+class AudioPlayer:
+    """비디오 재생 시 오디오 동기화를 위한 클래스"""
+
+    def __init__(self):
+        self.is_initialized = False
+        self.is_playing = False
+        self.current_position = 0
+        self.audio_length = 0
+        self.temp_audio_file = None
+        self._init_pygame()
+
+    def _init_pygame(self):
+        """Pygame 초기화"""
+        try:
+            pygame.mixer.pre_init(frequency=22050, size=-
+                                  16, channels=2, buffer=512)
+            pygame.mixer.init()
+            self.is_initialized = True
+        except Exception as e:
+            print(f"오디오 초기화 실패: {e}")
+            self.is_initialized = False
+
+    def load_audio_from_video(self, video_path, start_time=0, end_time=None):
+        """비디오에서 오디오 추출 및 로드"""
+        if not self.is_initialized:
+            return False
+
+        try:
+            import tempfile
+            from extract.extractor import VideoExtractor
+
+            # 임시 오디오 파일 생성
+            temp_dir = tempfile.gettempdir()
+            temp_filename = f"temp_audio_{int(time.time())}.wav"
+            self.temp_audio_file = os.path.join(temp_dir, temp_filename)
+
+            # 비디오에서 오디오 추출
+            if end_time is None:
+                # 전체 비디오 길이 가져오기
+                cap = cv2.VideoCapture(video_path)
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                end_time = frame_count / fps
+                cap.release()
+
+            result = VideoExtractor.extract_audio_segment(
+                input_video_path=video_path,
+                output_audio_path=self.temp_audio_file,
+                start_time=start_time,
+                end_time=end_time,
+                audio_format='wav'
+            )
+
+            if result['success']:
+                # 오디오 파일 로드
+                pygame.mixer.music.load(self.temp_audio_file)
+                self.audio_length = end_time - start_time
+                return True
+            else:
+                print(f"오디오 추출 실패: {result['message']}")
+                return False
+
+        except Exception as e:
+            print(f"오디오 로드 실패: {e}")
+            return False
+
+    def play(self):
+        """오디오 재생"""
+        if not self.is_initialized:
+            return False
+
+        try:
+            pygame.mixer.music.play()
+            self.is_playing = True
+            return True
+        except Exception as e:
+            print(f"오디오 재생 실패: {e}")
+            return False
+
+    def pause(self):
+        """오디오 일시정지"""
+        if not self.is_initialized:
+            return
+
+        try:
+            pygame.mixer.music.pause()
+            self.is_playing = False
+        except Exception as e:
+            print(f"오디오 일시정지 실패: {e}")
+
+    def unpause(self):
+        """오디오 재생 재개"""
+        if not self.is_initialized:
+            return
+
+        try:
+            pygame.mixer.music.unpause()
+            self.is_playing = True
+        except Exception as e:
+            print(f"오디오 재개 실패: {e}")
+
+    def stop(self):
+        """오디오 정지"""
+        if not self.is_initialized:
+            return
+
+        try:
+            pygame.mixer.music.stop()
+            self.is_playing = False
+            self.current_position = 0
+        except Exception as e:
+            print(f"오디오 정지 실패: {e}")
+
+    def set_position(self, position):
+        """오디오 위치 설정 (초 단위)"""
+        # pygame.mixer.music는 위치 설정을 직접 지원하지 않음
+        # 필요시 다른 라이브러리 사용 고려
+        self.current_position = position
+
+    def get_position(self):
+        """현재 오디오 위치 반환"""
+        return self.current_position
+
+    def is_audio_playing(self):
+        """오디오 재생 상태 확인"""
+        if not self.is_initialized:
+            return False
+        return pygame.mixer.music.get_busy() and self.is_playing
+
+    def cleanup(self):
+        """리소스 정리"""
+        try:
+            if self.is_initialized:
+                pygame.mixer.music.stop()
+                pygame.mixer.quit()
+
+            # 임시 파일 삭제
+            if self.temp_audio_file and os.path.exists(self.temp_audio_file):
+                os.remove(self.temp_audio_file)
+
+        except Exception as e:
+            print(f"오디오 정리 실패: {e}")
 
 
 class VideoUtils:
@@ -126,29 +338,6 @@ class VideoUtils:
         return max(1, round(original_fps / target_fps))
 
     @staticmethod
-    def cleanup_opencv_memory():
-        """메모리 정리"""
-        cv2.destroyAllWindows()
-
-    @staticmethod
-    def validate_video_section(cap, start_time, end_time):
-        """비디오 구간 유효성 검사"""
-        if not cap or not cap.isOpened():
-            return False, "비디오를 열 수 없습니다."
-
-        props = VideoUtils.get_video_properties(cap)
-        if not props:
-            return False, "비디오 속성을 가져올 수 없습니다."
-
-        if start_time < 0:
-            return False, "시작 시간은 0 초 보다 작을 수 없습니다."
-
-        if start_time >= end_time:
-            return False, "시작 시간은 종료 시간보다 빨라야 합니다."
-
-        return True, "유효한 구간입니다."
-
-    @staticmethod
     def initialize_video(video_path):
         """비디오 초기화 및 설정
 
@@ -256,3 +445,166 @@ class VideoUtils:
             else:
                 return app_instance.video_path
         return None
+
+    @staticmethod
+    def generate_output_folder_name(input_path, start_time, end_time, timestamp_format="%y%m%d"):
+        """이미지 추출용 출력 폴더명 생성"""
+        base_filename = os.path.splitext(os.path.basename(input_path))[0]
+        timestamp = datetime.now().strftime(timestamp_format)
+
+        # 시작/종료 시간을 파일명에 포함
+        start_time_str = VideoUtils.format_time(start_time).replace(':', '-')
+        end_time_str = VideoUtils.format_time(end_time).replace(':', '-')
+
+        # 폴더명 생성: [비디오명]_[시작시간]_[종료시간]_[날짜]
+        return f"{base_filename}_{start_time_str}_{end_time_str}_{timestamp}"
+
+    @staticmethod
+    def get_default_save_path():
+        """기본 저장 경로 가져오기 (바탕화면 또는 문서 폴더)"""
+        default_path = os.path.expanduser("~/Desktop")
+        if not os.path.exists(default_path):
+            default_path = os.path.expanduser("~/Documents")
+        return default_path
+
+    @staticmethod
+    def calculate_frame_skip_for_images(fps, max_fps=30):
+        """이미지 추출용 프레임 스킵 계산"""
+        # 30fps 이상이면 매 2번째 프레임만, 그 외는 모든 프레임
+        return 2 if fps >= max_fps else 1
+
+    @staticmethod
+    def calculate_frame_range(start_time, end_time, fps, frame_skip=1):
+        """프레임 범위 계산"""
+        start_frame = int(start_time * fps)
+        end_frame = int(end_time * fps)
+        frames_to_extract = list(range(start_frame, end_frame, frame_skip))
+        return frames_to_extract
+
+    @staticmethod
+    def generate_image_filename(base_filename, timestamp, frame_number):
+        """이미지 파일명 생성"""
+        return f"{base_filename}_{timestamp}_frame{frame_number:06d}.jpg"
+
+    @staticmethod
+    def extract_frames_from_video(input_path, output_folder, start_time, end_time,
+                                  progress_callback=None, cancel_event=None):
+        """비디오에서 프레임 추출 (공통 메서드)"""
+        cap = cv2.VideoCapture(input_path)
+        if not cap.isOpened():
+            raise Exception("비디오 파일을 열 수 없습니다.")
+
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_skip = VideoUtils.calculate_frame_skip_for_images(fps)
+
+            frames_to_extract = VideoUtils.calculate_frame_range(
+                start_time, end_time, fps, frame_skip)
+            total_frames = len(frames_to_extract)
+
+            if total_frames == 0:
+                raise Exception("추출할 프레임이 없습니다.")
+
+            base_filename = os.path.splitext(os.path.basename(input_path))[0]
+            timestamp = datetime.now().strftime("%Y%m%d")
+
+            extracted_count = 0
+            progress_update_interval = max(1, total_frames // 20)
+
+            for i, frame_num in enumerate(frames_to_extract):
+                # 취소 확인
+                if cancel_event and cancel_event.is_set():
+                    break
+
+                # 프레임 위치로 이동
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                ret, frame = cap.read()
+
+                if not ret:
+                    print(f"⚠️ 프레임 {frame_num} 읽기 실패")
+                    continue
+
+                # 이미지 파일명 생성
+                image_filename = VideoUtils.generate_image_filename(
+                    base_filename, timestamp, frame_num)
+                image_path = os.path.join(output_folder, image_filename)
+
+                # 이미지 저장
+                cv2.imwrite(image_path, frame)
+                extracted_count += 1
+
+                # 진행률 콜백 호출
+                if progress_callback and (i % progress_update_interval == 0 or i == total_frames - 1):
+                    progress = (i + 1) / total_frames * 100
+                    progress_callback(progress, extracted_count, total_frames)
+
+            return {
+                'extracted_count': extracted_count,
+                'total_frames': total_frames,
+                'fps': fps,
+                'frame_skip': frame_skip
+            }
+
+        finally:
+            cap.release()
+
+    @staticmethod
+    def extract_audio_from_video(input_path, output_folder, start_time, end_time,
+                                 progress_callback=None, cancel_event=None,
+                                 audio_format='mp3', audio_quality='192k'):
+        """비디오에서 오디오 추출 (공통 메서드)"""
+        from extract.extractor import VideoExtractor
+
+        try:
+            # 오디오 파일명 생성
+            base_filename = os.path.splitext(os.path.basename(input_path))[0]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            audio_filename = f"{base_filename}_{timestamp}.{audio_format}"
+            output_path = os.path.join(output_folder, audio_filename)
+
+            # 진행률 콜백 호출
+            if progress_callback:
+                progress_callback(50, 1, 1)  # 50% 진행률로 시작
+
+            # 취소 확인
+            if cancel_event and cancel_event.is_set():
+                return None
+
+            # VideoExtractor를 사용하여 오디오 추출
+            result = VideoExtractor.extract_audio_segment(
+                input_video_path=input_path,
+                output_audio_path=output_path,
+                start_time=start_time,
+                end_time=end_time,
+                progress_callback=lambda msg: progress_callback(
+                    75, 1, 1) if progress_callback else None,
+                audio_format=audio_format,
+                audio_quality=audio_quality
+            )
+
+            # 취소 확인
+            if cancel_event and cancel_event.is_set():
+                return None
+
+            if result['success']:
+                # 완료 시 진행률 업데이트
+                if progress_callback:
+                    progress_callback(100, 1, 1)
+
+                return {
+                    'extracted_count': 1,
+                    'total_frames': 1,
+                    'fps': 0,  # 오디오는 FPS가 없음
+                    'frame_skip': 0,
+                    'output_path': output_path,
+                    'audio_format': audio_format,
+                    'audio_quality': audio_quality
+                }
+            else:
+                raise Exception(result['message'])
+
+        except Exception as e:
+            raise Exception(f"오디오 추출 중 오류: {str(e)}")
+
+        finally:
+            pass

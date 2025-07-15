@@ -7,14 +7,36 @@ from .base_tab import BaseTab
 import os
 from utils.utils import VideoUtils
 from utils.styles import AppStyles
+from utils.event_system import event_system, Events
+from .command_handlers import MainTabCommandHandler
+from .command_handlers import NewTabCommandHandler
+from .command_handlers import SegmentTableCommandHandler
+from tkinter import filedialog
 
 
 class MainTab(BaseTab):
     def __init__(self, root, app):
+        """
+        기본 탭 초기화
+
+        Args:
+            root: GUI 부모 컨테이너
+            app: 애플리케이션 인스턴스
+        """
+
+        # 부모 클래스(BaseTab)의 초기화 메서드 호출
         super().__init__(root, app)  # BaseTab의 __init__ 호출
         self.root = root
+        # self.app = app  # 기존 app 인스턴스 유지
         self._init_variables()  # MainTab 전용 변수 초기화
+
+        # 메인탭 Command handler 초기화
+        self.main_command_handler = MainTabCommandHandler(app)
+        # command_handler에 main_tab 참조 설정
+        self.main_command_handler.set_main_tab(self)
+
         self.create_ui()  # MainTab UI 생성
+        self.setup_event_listeners()
 
         # 추가로 확인할 수 있는 코드 (디버깅 용도)
         print(f"MainTab frame created: {self.frame}")
@@ -22,8 +44,8 @@ class MainTab(BaseTab):
     def _init_variables(self):
         "Initialize MainTab UI variables"
         # 프레임 변수들
-        self.table_frame = None  # 왼쪽 (파란색)
-        self.info_frame = None  # 오른쪽 (노란색)
+        self.table_frame = None  # 왼쪽
+        self.info_frame = None  # 오른쪽
 
         # 참조 위젯 변수들
         self.videofile_label = None
@@ -40,6 +62,13 @@ class MainTab(BaseTab):
         self.set_start_button = None
         self.set_end_button = None
         self.preview_button = None
+
+    def setup_event_listeners(self):
+        """이벤트 리스너 설정 - UI 업데이트 전담"""
+        # UI 업데이트 이벤트만 구독
+        event_system.subscribe(Events.UI_UPDATE, self._on_ui_update)
+        event_system.subscribe(
+            Events.PLAYER_STATE_CHANGED, self._on_player_state_changed)
 
     def create_ui(self):
         """MainTab UI 구성 요소를 생성
@@ -67,28 +96,32 @@ class MainTab(BaseTab):
             row=0, column=0, padx=(15, 0), sticky="w")  # grid에서 column 0, sticky="w"로 왼쪽 붙이기
 
         # 파일 경로를 표시할 StringVar 생성
-        self.app.video_path = tk.StringVar()
+        self.video_path_var = tk.StringVar()
+
         # 비디오 파일 선택 텍스트 - 스타일 개선
         self.videofile_label = ttk.Label(
             self.openfile_frame, text="비디오 파일 선택", font=("Arial", 12, "bold"))
         self.videofile_label.grid(row=0, column=0, padx=(
             5, 5), sticky="w")  # width=60 제거 + sticky="w" 로 왼쪽으로 붙이기
 
+        # 엔트리 위젯에 바인딩 - StringVar 사용
         # 엔트리 박스 크기 조정하여 레이블 바로 옆에 붙이기
         self.videofile_entry = tk.Entry(
-            self.openfile_frame, textvariable=self.app.video_path, width=40 * int(UiUtils.get_scaling_factor(self.root)))
+            self.openfile_frame, textvariable=self.video_path_var,
+            width=40 * int(UiUtils.get_scaling_factor_by_dpi(self.root)))
         # "we"로 가로 방향을 늘릴 수 있습니다.
         self.videofile_entry.grid(row=0, column=1, padx=(0, 5), sticky="we")
 
         # 비디오 선택 버튼 생성
         self.video_select_button = ttk.Button(
-            self.openfile_frame, text="파일 선택", style="InfoLarge.TButton", command=self.app.open_file)
+            self.openfile_frame, text="파일 선택", style="InfoLarge.TButton",
+            command=self.main_command_handler.on_file_select)
         self.video_select_button.grid(row=0, column=2, padx=(0, 5))
 
         # info 프레임 (오른쪽으로 이동)
         self.info_frame = tk.Frame(self.top_frame)
         self.info_frame.grid(row=0, column=1, padx=10,
-                             pady=10, sticky="w")  # grid에서 column 1, sticky="w"로 왼왼쪽 붙이기
+                             pady=10, sticky="w")  # grid에서 column 1, sticky="w"로 왼쪽 붙이기
 
         # 섹션 타이틀
         self.section_title_label = ttk.Label(
@@ -110,7 +143,8 @@ class MainTab(BaseTab):
             비디오 로딩 안할때 백그라운드 컬러는 black"""
         # 비디오 프레임
         self.video_frame = tk.Frame(
-            self.frame, bg="black", width=640 * UiUtils.get_scaling_factor(self.root), height=360 * UiUtils.get_scaling_factor(self.root),
+            self.frame, bg="black", width=int(640 * UiUtils.get_scaling_factor_by_dpi(self.root)),
+            height=int(360 * UiUtils.get_scaling_factor_by_dpi(self.root)),
             relief="solid", borderwidth=2)
         self.video_frame.pack(fill='both', expand=True, padx=10, pady=10)
         self.video_frame.pack_propagate(False)
@@ -173,11 +207,15 @@ class MainTab(BaseTab):
         control_buttons_subframe.pack(pady=8)
 
         self.play_button = ttk.Button(control_buttons_subframe, text="► 재생",
-                                      style="PlayOutline.TButton", command=self.app.toggle_play, width=12)
+                                      style="PlayOutline.TButton",
+                                      command=self.main_command_handler.on_play_click, width=12,
+                                      state=tk.DISABLED)
         self.play_button.pack(side=tk.LEFT, padx=10, pady=2)
 
         self.stop_button = ttk.Button(control_buttons_subframe, text="◼ 정지",
-                                      style="StopOutline.TButton", command=self.app.stop_video, width=12)
+                                      style="StopOutline.TButton",
+                                      command=self.main_command_handler.on_stop_click, width=12,
+                                      state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=10, pady=2)
 
     def create_interval_section(self):  # <- create_edit_section 에서 이름 변경
@@ -196,7 +234,7 @@ class MainTab(BaseTab):
         self.set_start_button = ttk.Button(self.interval_frame,
                                            text="시작 지점 설정",
                                            style='PastelGreenOutline.TButton',
-                                           command=self.app.set_start_time,
+                                           command=self.main_command_handler.on_set_start_click,
                                            state=tk.DISABLED)
         self.set_start_button.grid(row=0, column=1, sticky="w", pady=(0, 3))
 
@@ -209,7 +247,7 @@ class MainTab(BaseTab):
         self.set_end_button = ttk.Button(self.interval_frame,
                                          text="종료 지점 설정",
                                          style='PastelGreenOutline.TButton',
-                                         command=self.app.set_end_time,
+                                         command=self.main_command_handler.on_set_end_click,
                                          state=tk.DISABLED)
         self.set_end_button.grid(row=1, column=1, sticky="w", pady=(3, 10))
 
@@ -228,8 +266,7 @@ class MainTab(BaseTab):
             self.save_action_frame,
             text="💾 구간 저장",
             style='2Pastel.TButton',
-            command=lambda: self.app.save_current_segment(
-                parent_window=self.app.root)
+            command=self.main_command_handler.on_save_segment_click
         )
         self.save_segment_button.pack(
             pady=(10, 5), padx=5, fill=tk.X, expand=True)
@@ -238,9 +275,75 @@ class MainTab(BaseTab):
             self.save_action_frame,
             text="🎬 선택구간 미리보기",
             style='3Pastel.TButton',
-            command=lambda: self.app.preview_selection()
+            command=self.main_command_handler.on_preview_click
         )
         self.preview_button.pack(pady=5, padx=5, fill=tk.X, expand=True)
+
+    # UI 업데이트 이벤트 리스너
+    def _on_ui_update(self, **kwargs):  # 함수의 매개변수로 여러 개의 키-값 쌍을 전달, Dict 형태로 전달
+        """UI 업데이트 이벤트 처리"""
+        component = kwargs.get('component', '')
+
+        if component == "video_info":
+            self._update_video_info()
+        elif component == "play_button":
+            self._update_play_button()
+        elif component == "video_controls":
+            self._update_video_controls()
+        elif component == "slider":
+            self._update_slider()
+        elif component == "segment_labels":
+            self._update_segment_labels()
+        elif component == "save_buttons":
+            self._update_save_buttons()
+
+    def _on_player_state_changed(self, is_playing, is_stopped, **kwargs):
+        """플레이어 상태 변경 이벤트를 처리하여 UI를 업데이트"""
+        if is_stopped:
+            self.play_button.config(text="► 재생")
+            self.position_slider.set(0)
+            self.position_label.config(text="00:00")
+            # 비디오 로드 여부에 따라 버튼 상태 결정
+            if self.app.cap:
+                self.play_button.config(state=tk.NORMAL)
+                self.stop_button.config(state=tk.NORMAL)
+                self.set_start_button.config(state=tk.NORMAL)
+                self.set_end_button.config(state=tk.NORMAL)
+            else:
+                self.play_button.config(state=tk.DISABLED)
+                self.stop_button.config(state=tk.DISABLED)
+                self.set_start_button.config(state=tk.DISABLED)
+                self.set_end_button.config(state=tk.DISABLED)
+        else:  # Playing or Paused
+            self.stop_button.config(state=tk.NORMAL)
+            if is_playing:
+                self.play_button.config(text="|| 일시정지")
+                self.set_start_button.config(state=tk.NORMAL)
+                self.set_end_button.config(state=tk.NORMAL)
+            else:  # Paused
+                self.play_button.config(text="► 재생")
+                self.set_start_button.config(state=tk.NORMAL)
+                self.set_end_button.config(state=tk.NORMAL)
+
+        # 구간이 올바르게 설정되어 있으면 저장 버튼도 활성화
+        self.app.update_save_button_state()
+
+    # UI 업데이트 메서드들
+    def _update_video_info(self):
+        """비디오 정보 업데이트"""
+        video_info = self.app_state.get_video_info()
+        if video_info['is_loaded']:
+            info_text = f"비디오 이름: {os.path.basename(video_info['path'])}\n"
+            info_text += f"프레임 레이트: {video_info['fps']}\n"
+            info_text += f"동영상 길이: {video_info['duration']}초\n"
+            info_text += f"동영상 해상도: {video_info['width']} x {video_info['height']}"
+            self.video_info_label.config(text=info_text)
+
+            # 슬라이더 범위 설정
+            self.position_slider.config(to=video_info['duration'])
+
+            # 버튼 상태 업데이트
+            self._update_button_states()
 
     def _save_widget_references(self):
         """앱에 위젯 참조 저장"""
