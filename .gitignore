@@ -105,3 +105,11 @@ dmypy.json
 
 # jetbrain
 .idea
+
+# Build 
+*.build/
+*.dist/
+*.spec
+*.exe
+*.json
+*.log
