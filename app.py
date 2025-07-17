@@ -205,16 +205,16 @@ class VideoEditorApp:
     def stop_video(self, **kwargs):
         """비디오 정지"""
         if self.cap:
-        self.is_playing = False
+            self.is_playing = False
 
-           # 오디오 정지
-           if self.audio_player.is_initialized:
-                self.audio_player.stop()
+        # 오디오 정지
+        if self.audio_player.is_initialized:
+            self.audio_player.stop()
 
-            event_system.emit(Events.PLAYER_STATE_CHANGED,
-                              is_playing=False, is_stopped=True)
+        event_system.emit(Events.PLAYER_STATE_CHANGED,
+                          is_playing=False, is_stopped=True)
 
-            # 비디오를 처음으로 되돌리기
+        # 비디오를 처음으로 되돌리기
         if self.cap is not None and self.cap.isOpened():
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 

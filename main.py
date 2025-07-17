@@ -2,6 +2,7 @@ import sys
 import os
 import ttkbootstrap as ttk
 from ttkbootstrap import Window
+import app
 from app import VideoEditorApp
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
