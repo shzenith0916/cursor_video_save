@@ -7,8 +7,7 @@ from datetime import datetime
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from .ui_utils import UiUtils
-import pygame
-import threading
+from .event_system import event_system, Events
 import time
 
 
@@ -73,152 +72,8 @@ def show_custom_messagebox(parent, title, message, msg_type="info", auto_close_m
     dialog.wait_window()
 
 
-class AudioPlayer:
-    """비디오 재생 시 오디오 동기화를 위한 클래스"""
-
-    def __init__(self):
-        self.is_initialized = False
-        self.is_playing = False
-        self.current_position = 0
-        self.audio_length = 0
-        self.temp_audio_file = None
-        self._init_pygame()
-
-    def _init_pygame(self):
-        """Pygame 초기화"""
-        try:
-            pygame.mixer.pre_init(frequency=22050, size=-
-                                  16, channels=2, buffer=512)
-            pygame.mixer.init()
-            self.is_initialized = True
-        except Exception as e:
-            print(f"오디오 초기화 실패: {e}")
-            self.is_initialized = False
-
-    def load_audio_from_video(self, video_path, start_time=0, end_time=None):
-        """비디오에서 오디오 추출 및 로드"""
-        if not self.is_initialized:
-            return False
-
-        try:
-            import tempfile
-            from extract.extractor import VideoExtractor
-
-            # 임시 오디오 파일 생성
-            temp_dir = tempfile.gettempdir()
-            temp_filename = f"temp_audio_{int(time.time())}.wav"
-            self.temp_audio_file = os.path.join(temp_dir, temp_filename)
-
-            # 비디오에서 오디오 추출
-            if end_time is None:
-                # 전체 비디오 길이 가져오기
-                cap = cv2.VideoCapture(video_path)
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-                end_time = frame_count / fps
-                cap.release()
-
-            result = VideoExtractor.extract_audio_segment(
-                input_video_path=video_path,
-                output_audio_path=self.temp_audio_file,
-                start_time=start_time,
-                end_time=end_time,
-                audio_format='wav'
-            )
-
-            if result['success']:
-                # 오디오 파일 로드
-                pygame.mixer.music.load(self.temp_audio_file)
-                self.audio_length = end_time - start_time
-                return True
-            else:
-                print(f"오디오 추출 실패: {result['message']}")
-                return False
-
-        except Exception as e:
-            print(f"오디오 로드 실패: {e}")
-            return False
-
-    def play(self):
-        """오디오 재생"""
-        if not self.is_initialized:
-            return False
-
-        try:
-            pygame.mixer.music.play()
-            self.is_playing = True
-            return True
-        except Exception as e:
-            print(f"오디오 재생 실패: {e}")
-            return False
-
-    def pause(self):
-        """오디오 일시정지"""
-        if not self.is_initialized:
-            return
-
-        try:
-            pygame.mixer.music.pause()
-            self.is_playing = False
-        except Exception as e:
-            print(f"오디오 일시정지 실패: {e}")
-
-    def unpause(self):
-        """오디오 재생 재개"""
-        if not self.is_initialized:
-            return
-
-        try:
-            pygame.mixer.music.unpause()
-            self.is_playing = True
-        except Exception as e:
-            print(f"오디오 재개 실패: {e}")
-
-    def stop(self):
-        """오디오 정지"""
-        if not self.is_initialized:
-            return
-
-        try:
-            pygame.mixer.music.stop()
-            self.is_playing = False
-            self.current_position = 0
-        except Exception as e:
-            print(f"오디오 정지 실패: {e}")
-
-    def set_position(self, position):
-        """오디오 위치 설정 (초 단위)"""
-        # pygame.mixer.music는 위치 설정을 직접 지원하지 않음
-        # 필요시 다른 라이브러리 사용 고려
-        self.current_position = position
-
-    def get_position(self):
-        """현재 오디오 위치 반환"""
-        return self.current_position
-
-    def is_audio_playing(self):
-        """오디오 재생 상태 확인"""
-        if not self.is_initialized:
-            return False
-        return pygame.mixer.music.get_busy() and self.is_playing
-
-    def cleanup(self):
-        """리소스 정리"""
-        try:
-            if self.is_initialized:
-                pygame.mixer.music.stop()
-                pygame.mixer.quit()
-
-            # 임시 파일 삭제
-            if self.temp_audio_file and os.path.exists(self.temp_audio_file):
-                os.remove(self.temp_audio_file)
-
-        except Exception as e:
-            print(f"오디오 정리 실패: {e}")
-
-
 class VideoUtils:
-    """비디오 처리 관련 공통 기능을 제공하는 클래스"""
+    """비디오 관련 유틸리티 클래스"""
     @staticmethod
     def format_time(seconds):
         '''초를 mm:ss 형식으로 변환하는 함수 '''
@@ -265,23 +120,76 @@ class VideoUtils:
             return None
 
     @staticmethod
-    def get_video_properties(cap):
-        """비디오 속성 가져오기"""
-        if not cap or not cap.isOpened():
+    def get_opencv_video_info(video_path):
+        """OpenCV로 비디오 정보 가져오기"""
+        try:
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                return None
+
+            video_info = {
+                'duration': cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS),
+                'fps': cap.get(cv2.CAP_PROP_FPS),
+                'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                'frame_count': int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            }
+
+            cap.release()
+            return video_info
+
+        except Exception as e:
+            print(f"OpenCV 비디오 정보 가져오기 실패: {e}")
             return None
 
-        properties = {
-            'fps': cap.get(cv2.CAP_PROP_FPS),
-            'frame_count': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-            'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-            'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        }
+    @staticmethod
+    def update_video_ui_components(video_info, ui_components):
+        """UI 컴포넌트 업데이트"""
+        try:
+            if video_info and hasattr(ui_components, 'video_info_label'):
+                info_text = f"길이: {VideoUtils.format_time(int(video_info['duration']))}\n"
+                info_text += f"해상도: {video_info['width']}x{video_info['height']}\n"
+                info_text += f"FPS: {video_info['fps']:.1f}"
+                ui_components.video_info_label.config(text=info_text)
+        except Exception as e:
+            print(f"UI 업데이트 실패: {e}")
 
-        # 비디오 길이(초) 계산
-        properties['length'] = properties['frame_count'] / \
-            properties['fps'] if properties['fps'] > 0 else 0
+    @staticmethod
+    def get_video_path_from_app(app_instance):
+        """앱에서 비디오 경로 가져오기"""
+        if hasattr(app_instance, 'video_path'):
+            return app_instance.video_path
+        return None
 
-        return properties
+    @staticmethod
+    def get_file_info(file_path):
+        """파일 정보 가져오기"""
+        try:
+            cap = cv2.VideoCapture(file_path)
+            if not cap.isOpened():
+                return None, "비디오 파일을 열 수 없습니다."
+
+            props = {
+                'fps': cap.get(cv2.CAP_PROP_FPS),
+                'frame_count': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+                'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                'length': cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)
+            }
+
+            file_stats = os.stat(file_path)
+            file_info = {
+                'video_props': props,
+                'file_name': os.path.basename(file_path),
+                'file_path': file_path,
+                'file_size': f"{file_stats.st_size / (1024*1024):.1f} MB"
+            }
+
+            cap.release()
+            return file_info, None
+
+        except Exception as e:
+            return None, f"파일 정보 오류: {str(e)}"
 
     @staticmethod
     def calculate_frame_number(time_seconds, fps):
@@ -338,69 +246,6 @@ class VideoUtils:
         return max(1, round(original_fps / target_fps))
 
     @staticmethod
-    def initialize_video(video_path):
-        """비디오 초기화 및 설정
-
-        Args:
-            video_path (str): 비디오 파일 경로
-
-        Returns:
-            tuple: (VideoCapture 객체, fps) 또는 실패시 (None, None)
-        """
-        try:
-            cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                raise Exception("비디오 파일을 열 수 없습니다.")
-
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if fps <= 0:
-                raise Exception("비디오 FPS를 읽을 수 없습니다.")
-
-            return cap, fps
-
-        except Exception as e:
-            print(f"비디오 초기화 실패: {str(e)}")
-            return None, None
-
-    @staticmethod
-    def get_file_info(file_path):
-        """파일 정보 가져오기 (비디오 속성 + 파일 기본 정보)"""
-        try:
-            # 비디오 속성 가져오기
-            cap = cv2.VideoCapture(file_path)
-            if not cap.isOpened():
-                return None, "원본 비디오 파일을 열 수 없습니다."
-
-            props = VideoUtils.get_video_properties(cap)
-            if not props:
-                cap.release()
-                return None, "비디오 속성을 가져오는 중 오류 발생"
-
-            # 파일 기본 정보
-            file_stats = os.stat(file_path)
-
-            # 파일 크기를 읽기 쉬운 형식으로 변환
-            def format_size(size):
-                for unit in ['B', 'KB', 'MB', 'GB']:
-                    if size < 1024:
-                        return f"{size:.1f} {unit}"
-                    size /= 1024
-                return f"{size:.1f} TB"
-
-            file_info = {
-                'video_props': props,
-                'file_name': os.path.basename(file_path),
-                'file_path': file_path,
-                'file_size': format_size(file_stats.st_size)
-            }
-
-            cap.release()
-            return file_info, None
-
-        except Exception as e:
-            return None, f"파일 정보를 불러오는 중 오류 발생: {str(e)}"
-
-    @staticmethod
     def find_input_file(filename, app_instance):
         """입력 파일 경로 찾기 (공통 메서드)
 
@@ -427,23 +272,6 @@ class VideoUtils:
             if full_path and os.path.basename(full_path) == filename and os.path.exists(full_path):
                 return full_path
 
-        return None
-
-    @staticmethod
-    def get_video_path_from_app(app_instance):
-        """앱 인스턴스에서 video_path 가져오기 (StringVar 처리 포함)
-
-        Args:
-            app_instance: 앱 인스턴스
-
-        Returns:
-            str or None: video_path 값 또는 None
-        """
-        if hasattr(app_instance, 'video_path') and app_instance.video_path:
-            if hasattr(app_instance.video_path, 'get'):
-                return app_instance.video_path.get()
-            else:
-                return app_instance.video_path
         return None
 
     @staticmethod

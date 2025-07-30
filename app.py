@@ -1,20 +1,21 @@
 import os
-import cv2
 import numpy as np
 import csv
 from PIL import Image, ImageTk
 import threading
 
-import tkinter as tk  # gui 모듈 포함하여 import
-import ttkbootstrap as ttk  # ttkbootstrap으로 변경
-from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
+import tkinter as tk
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 from tkinter import messagebox, filedialog
 from utils.styles import AppStyles
-from utils.utils import VideoUtils, AudioPlayer
+from utils.utils import VideoUtils
+from utils.vlc_utils import VLCPlayer
 from ui_components import create_tabs
 from ui_components.preview_window import PreviewWindow
 from utils.ui_utils import UiUtils
 from utils.event_system import event_system, Events
+import cv2
 
 
 class VideoEditorApp:
@@ -43,8 +44,8 @@ class VideoEditorApp:
         self.current_image = None  # show_frame 함수에서 사용할 이미지 참조용용
         self.video_label = None  # 비디오 표시 레이블
 
-        # 오디오 플레이어 초기화
-        self.audio_player = AudioPlayer()
+        # 비디오 플레이어 초기화
+        self.video_player = None
 
         # 구간 선택 변수
         self.start_time = 0
@@ -74,88 +75,50 @@ class VideoEditorApp:
         file_path = kwargs.get('path')
         if file_path:
             self.video_path = file_path
-            if self.initialize_video():
-                self.get_video_info(self.video_path)
-            else:
-                # 비디오 초기화 실패 시 오류 메시지 표시
-                print("비디오 초기화 실패")
+            print(f"비디오 로드 시작: {file_path}")
 
-    def initialize_video(self):
-        '''OpenCV로 비디오 캡쳐 객체 초기화'''
+            try:
+                # 1. video_canvas가 생성되어 있는지 확인
+                if not hasattr(self, 'video_canvas') or not self.video_canvas:
+                    print("App: video_canvas가 아직 생성되지 않음. UI 초기화를 기다립니다.")
+                    return False
 
-        if self.cap is not None:
-            self.cap.release()
+                # 2. VLCPlayer 인스턴스 생성
+                if not hasattr(self, 'vlc_player') or not self.vlc_player:
+                    print("App: VLCPlayer 인스턴스 생성")
+                    self.vlc_player = VLCPlayer()
 
-        self.cap = cv2.VideoCapture(self.video_path)
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+                # 3. VLC 플레이어가 제대로 초기화되었는지 확인
+                if not self.vlc_player or not hasattr(self.vlc_player, 'media_player') or not self.vlc_player.media_player:
+                    print("App: VLC 플레이어 초기화 실패")
+                    return False
 
-        if not self.cap.isOpened():
-            print("비디오 파일을 열 수 없습니다.")
-            return False
+                # 4. video_canvas를 VLC에 연결
+                print("App: video_canvas를 VLC 플레이어에 연결")
+                self.vlc_player.set_video_widget(self.video_canvas)
 
-        print(f"Video opened: {self.cap.isOpened()}")  # 비디오 열기 성공 여부
-        self.show_frame(0)
-        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                # 5. 비디오 로드 (이게 반드시 마지막이어야 함!)
+                print("App: 비디오 로드 시작")
+                if self.vlc_player.load_video(self.video_path):
+                    # 비디오 정보 설정
+                    self.video_length = self.vlc_player.get_duration()
+                    print(f"App: 비디오 로드 성공. 길이: {self.video_length}초")
 
-        # UI 업데이트 이벤트 발행
-        event_system.emit(Events.UI_UPDATE,
-                          video_path=self.video_path,
-                          duration=self.video_length,
-                          fps=self.fps,
-                          total_frames=self.total_frames)
+                    # UI 업데이트 이벤트 발행
+                    event_system.emit(Events.UI_UPDATE,
+                                      video_path=self.video_path,
+                                      duration=self.video_length,
+                                      component="video_info")
+                    return True
+                else:
+                    print("App: 비디오 로드 실패")
+                    return False
 
-        # 플레이어 상태 변경 이벤트 발행 (정지 상태, 준비 완료)
-        event_system.emit(Events.PLAYER_STATE_CHANGED,
-                          is_playing=False, is_stopped=True)
-
-        return True
-
-    def get_video_info(self, video_path):
-        """OpenCV로 비디오 정보 확인 """
-
-        if self.cap and self.cap.isOpened():
-
-            # 비디오 속성 가져오기
-            props = VideoUtils.get_video_properties(self.cap)
-
-            # 속성 저장
-            self.frame_count = props['frame_count']
-            self.video_length = props['length']
-            self.width = props['width']
-            self.height = props['height']
-
-            # 비디오 정보 표시
-            self.video_name = os.path.basename(video_path)
-
-            # UI 요소 업데이트 (create_ui 함수 구현에 따라 수정 필요)
-            self.video_info_label.config(
-                text=f"비디오 이름: {self.video_name}\n"
-                     f"프레임 레이트: {self.fps}\n"
-                     f"동영상 길이: {self.video_length}초\n"
-                     f"동영상 해상도: {self.width} x {self.height}"
-            )
-
-            # 슬라이더 범위 설정
-            self.position_slider.config(to=self.video_length)
-
-            # 초기 종료 위치 비디오 끝으로 설정
-            self.end_time_label.config(
-                text=f"구간 종료: {VideoUtils.format_time(self.video_length)}")
-            self.end_time = self.video_length
-
-            # 비디오의 첫 프레임(0)으로 위치 설정
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            # 현재 프레임 읽기기
-            ret, frame = self.cap.read()
-            # ret: 프레임 읽기 성공 여부 (True/False)
-            # frame: 실제 이미지 데이터 (numpy array)
-            if ret:
-                self.show_frame(frame)
-            return True
-
-        else:
-            print(f"Error: Could not open video file {video_path}")
-            return False
+            except Exception as e:
+                print(f"App: 비디오 로드 중 오류 발생: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
 
     def handle_play_toggle(self, **kwargs):
         """재생/일시정지 토글 이벤트 처리"""
@@ -165,138 +128,59 @@ class VideoEditorApp:
             self.play_video()
 
     def play_video(self):
-        """비디오 재생"""
-        if not self.is_playing and self.cap:
+        """VLC 전용 비디오 재생"""
+        if self.vlc_player and not self.is_playing:
+            self.vlc_player.play()
             self.is_playing = True
 
-            # 오디오 재생 시작
-            if self.video_path and self.audio_player.is_initialized:
-                # 현재 비디오 위치 가져오기
-                current_pos = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
-                current_time = current_pos / self.fps if self.fps > 0 else 0
-
-                # 오디오 로드 및 재생
-                if self.audio_player.load_audio_from_video(self.video_path, current_time, self.video_length):
-                    self.audio_player.play()
-
-            event_system.emit(Events.PLAYER_STATE_CHANGED,
-                              is_playing=True, is_stopped=False)
-            self.update_frames()
-
     def pause_video(self):
-        """비디오 일시정지"""
-        if self.is_playing:
+        """VLC 전용 비디오 일시정지"""
+        if self.vlc_player and self.is_playing:
+            self.vlc_player.pause()
             self.is_playing = False
 
-            # 오디오 일시정지
-            if self.audio_player.is_initialized:
-                self.audio_player.pause()
-
-            # 이 로직은 UI 업데이트 이벤트로 처리되어야 함 -> _on_player_state_changed 메서드에서 처리
-            # self.play_button.config(text="► 재생")  # 재생 아이콘
-            # 일시정지 상태에서 구간 설정 버튼 활성화
-            # self.set_start_button.config(state=tk.NORMAL)
-            # self.set_end_button.config(state=tk.NORMAL)
-            # 구간이 올바르게 설정되어 있으면 저장 버튼도 활성화
-            self.update_save_button_state()
-            event_system.emit(Events.PLAYER_STATE_CHANGED,
-                              is_playing=False, is_stopped=False)
-
-    def stop_video(self, **kwargs):
-        """비디오 정지"""
-        if self.cap:
+    def stop_video(self):
+        """VLC 전용 비디오 정지"""
+        if self.vlc_player:
+            self.vlc_player.stop()
             self.is_playing = False
 
-        # 오디오 정지
-        if self.audio_player.is_initialized:
-            self.audio_player.stop()
+    # OpenCV 관련 메서드들은 제거 (이미지 추출은 별도 모듈에서 처리)
+    # update_frames, show_frame 등은 VLC가 자체 처리하므로 불필요
 
-        event_system.emit(Events.PLAYER_STATE_CHANGED,
-                          is_playing=False, is_stopped=True)
+    def get_video_info(self, video_path):
+        """VLC로 비디오 정보 확인"""
+        if self.vlc_player:
+            video_info = self.vlc_player.get_video_info()
+            if video_info:
+                self.video_length = video_info.get('duration', 0)
+                self.video_name = os.path.basename(video_path)
+                return True
 
-        # 비디오를 처음으로 되돌리기
-        if self.cap is not None and self.cap.isOpened():
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        print(f"Error: VLC 비디오 정보를 가져올 수 없습니다.")
+        return False
 
-            # 슬라이더 위치 초기화 - 이 로직은 UI 업데이트 이벤트로 처리되어야 함 -> _on_player_state_changed 메서드에서 처리
-            # self.position_slider.set(0)
-            # self.position_label.config(text="00:00")
+    def _get_ui_components(self):
+        """UI 컴포넌트들 참조 가져오기"""
+        # UI 컴포넌트들을 담을 객체 생성
+        class UIComponents:
+            pass
 
-    def update_frames(self):
-        """비디오 프레임 업데이트"""
-        if self.is_playing and self.cap is not None and self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if ret:
-                self.show_frame(frame)
+        ui_components = UIComponents()
 
-                # UI 업데이트 (슬라이더 및 시간표시)
-                current_pos = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
-                current_time = current_pos / self.fps
+        # UI 컴포넌트들 참조 설정
+        if hasattr(self, 'position_slider'):
+            ui_components.position_slider = self.position_slider
+        if hasattr(self, 'slider_label'):
+            ui_components.slider_label = self.slider_label
+        if hasattr(self, 'end_time_label'):
+            ui_components.end_time_label = self.end_time_label
+        if hasattr(self, 'video_info_label'):
+            ui_components.video_info_label = self.video_info_label
 
-                self.position_slider.set(current_time)
-                # 현재 시간 레이블 업데이트
-                self.position_label.config(
-                    text=VideoUtils.format_time(int(current_time)))
+        ui_components.video_path = self.video_path
 
-                # 종료 시간에 도달했는지 확인
-                if current_time >= self.end_time and self.is_playing:
-                    self.is_playing = False
-                    self.is_previewing = False
-                    self.play_button.config(text="► 재생")
-                    return
-
-                # 다음 프레임 예약
-                delay = int(1000 / self.fps)
-                self.root.after(delay, self.update_frames)
-
-            else:
-                # 비디오 끝에 다다르면 재생 중지
-                self.is_playing = False
-                self.play_button.config(text="► 재생")
-                # 구간 미리보기가 아닐경우, 처음으로 되돌리기
-                if not hasattr(self, 'is_previewing') or not self.is_previewing:
-                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    self.show_frame(0)
-
-    def show_frame(self, frame):
-        """프레임 화면에 표시"""
-
-        try:
-            # 유연한 입력 처리 유지
-            if isinstance(frame, int):  # frame 매개변수가 정수(integer)인지 확인하는 조건문
-                # 프레임 번호를 프레임 데이터로 변환
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame)
-                ret, frame = self.cap.read()
-                if not ret:
-                    print(f"Error: Could not read frame {frame}")
-                    return
-
-            # 이미지를 비디오 레이블에 표시. 동적 레이블 생성 유지
-            if self.video_label is None:
-                # video_frame은 create_tabs에서  이미 생성된 프레임어야 함
-                if hasattr(self, "video_frame") and self.video_frame is not None:
-                    print("비디오 레이블 생성 중 ...")
-                    self.video_label = tk.Label(self.video_frame)
-                    self.video_label.pack(expand=True, fill="both")
-                else:
-                    print("Warning: 'video_frame' not found, video label을 생성할 수 없습니다.")
-                    return
-
-            photo = VideoUtils.convert_frame_to_photo(frame)
-
-            # 메모리 관리 유지 측면상 중요한 코드 라인!! -> 이미지 객체 참조를 저장
-            self.current_image = photo
-            # 매 프레임마다 self.current_image에 새 이미지 참조가 저장되고, 이전 이미지 참조는 자동으로 가비지 컬렉션 대상
-            # 메모리 관리 측면에서, 항상 최신 프레임만 저장하고 메모리가 한 프레임 분량만 사용.
-
-            # 이미지 업데이트
-            self.video_label.config(image=photo)
-            self.video_label.image = photo  # 중복 참조로 더 안전
-
-        except Exception as e:
-            print(f"Error in showing frame: {e}")
-            import traceback
-            traceback.print_exc()  # 상세한 에러 정보
+        return ui_components
 
     def set_start_time(self, time: float):
         """시작 시간 지정 (이벤트 핸들러)"""
@@ -317,74 +201,20 @@ class VideoEditorApp:
         """구간 저장 버튼 활성화/비활성화 상태 업데이트"""
         # 구간 유효성만 확인 (비디오 로드 시 이미 유효한 초기값이 설정됨)
         if hasattr(self, 'start_time') and hasattr(self, 'end_time') and \
-           self.start_time < self.end_time:
+                self.start_time < self.end_time:
             self.save_segment_button.config(state=tk.NORMAL)
         else:
             self.save_segment_button.config(state=tk.DISABLED)
 
     def select_position(self, value):
-        '''슬라이더 값 변경 시 호출되는 함수'''
-        if self.cap is None or not self.cap.isOpened():
-            return
-
-        try:
-            value = float(value)  # 슬라이더 값은 초 단위
-            frame_num = int(value * self.fps)
-
-            # 프레임 번호 계산 (초 * fps)
-            target_frame = frame_num
-            total_frames = self.cap.get(cv2.CAP_PROP_FRAME_COUNT)
-
-            # 프레임 범위 체크
-            if target_frame < 0:
-                target_frame = 0
-            elif target_frame >= total_frames:
-                target_frame = int(total_frames - 1)
-
-            # 디버깅용 프린트문
-            # print(f"slider_value: {value}, target frame: {target_frame}/{total_frames}")
-
-            # 프레임 위치 설정 및 표시
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-            # cv2.CAP_PROP_POS_FRAMES는 "다음에 읽을(Grab할) 프레임의 인덱스"를 나타내는 프로퍼티(property) 상수
-            # 현재 동영상 스트림의 읽기 위치(다음에 읽을 프레임 번호)를 target_frame(정수) 번째 프레임으로 옮기라는 의미
-
-            # 현재 캡쳐 객체의 다음 프레임을 가져와 디코딩.
-            ret, frame = self.cap.read()
-            # ret: 프레임 읽기 성공 여부 (True/False)
-            # frame: 실제 이미지 데이터 (numpy array)
-
-            if ret:
-                self.show_frame(frame)
-
-                # 실제 현재 시간 계산 (프레임 기반)
-                current_frame = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
-                current_time_secs = current_frame / self.fps
-
-                # 오디오 위치 동기화 (재생 중이 아닐 때만)
-                if not self.is_playing and self.audio_player.is_initialized:
-                    self.audio_player.set_position(current_time_secs)
-
-                # UI 업데이트
-                current_time_str = VideoUtils.format_time(
-                    int(current_time_secs))
-                self.position_label.config(text=current_time_str)
-
-                # 현재 시간을 인스턴스 변수에 저장 (다른 메서드에서 사용할 수 있도록)
-                self.current_time_str = current_time_secs
-
-            else:
-                print(f"Failed to read frame {target_frame}")
-
-        except Exception as e:
-            print(f"Error in select_position: {str(e)}")
-            import traceback
-            traceback.print_exc()  # 상세한 에러 정보
+        '''VLC 전용 슬라이더 값 변경'''
+        if self.vlc_player:
+            self.vlc_player.set_position(float(value))
 
     def _validate_selection(self):
         """구간 선택 유효성 검사 공통 메서드"""
         # 비디오 로드 여부 확인
-        if not self.cap or not hasattr(self, "video_path") or self.video_path == "":
+        if not self.vlc_player or not self.vlc_player.is_video_loaded():
             tk.messagebox.showwarning("경고", "비디오를 먼저 로드해주세요.")
             return False
 
@@ -461,19 +291,16 @@ class VideoEditorApp:
         if not self._validate_selection():
             return
 
-        if not self.cap or not self.cap.isOpened() or self.fps is None:
+        if not self.vlc_player or not self.vlc_player.is_video_loaded():
             return
 
         # 구간 시작 위치로 이동
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, int(self.start_time * self.fps))
+        self.vlc_player.set_position(self.start_time)
 
         # 구간 재생 모드 설정
         self.is_playing = True
         self.is_previewing = True  # 구간 재생 중임을 표시
         self.play_button.config(text="|| 일시정지")
-
-        # 비동기 업데이트 시작
-        self.update_frames()
 
     def stop_selection_play(self):
         """구간 재생 중지"""
@@ -493,7 +320,7 @@ class VideoEditorApp:
         # 중복 체크 추가
         for existing_segment in self.saved_segments:
             if (abs(existing_segment['start'] - segment['start']) < 0.1) and \
-               (abs(existing_segment['end'] - segment['end']) < 0.1):
+                    (abs(existing_segment['end'] - segment['end']) < 0.1):
                 if parent_window:
                     # 부모 창 위로 메세지 표시하여 UX 개선
                     messagebox.showinfo(

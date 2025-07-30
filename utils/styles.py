@@ -1,8 +1,27 @@
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
+import tkinter as tk
+from tkinter import font
 
 
 class AppStyles:
+    @staticmethod
+    def get_korean_font():
+        """사용 가능한 한글 폰트 찾기"""
+        try:
+            available_fonts = font.families()
+            korean_fonts = ['Malgun Gothic', '맑은 고딕',
+                            'Gulim', '굴림', 'Dotum', '돋움', 'Batang', '바탕']
+
+            for font_name in korean_fonts:
+                if font_name in available_fonts:
+                    return font_name
+
+            # 한글 폰트를 찾지 못한 경우 기본 폰트 사용
+            return 'TkDefaultFont'
+        except:
+            return 'TkDefaultFont'
+
     @staticmethod
     def get_pastel_colors():
         """파스텔 그린 컬러 팔레트 반환 - 실제 버튼 스타일에서 사용되는 색상들"""
@@ -31,9 +50,12 @@ class AppStyles:
         # 컬러 팔레트 가져오기
         colors = AppStyles.get_pastel_colors()
 
+        # 한글 폰트 설정 (시스템에 따라 우선순위 적용)
+        korean_font = ('Malgun Gothic', '맑은 고딕', 'Arial', 'sans-serif')
+
         # 1Pastel.TButton
         style.configure('1Pastel.TButton',
-                        font=('Arial', 12, 'bold'),
+                        font=(korean_font[0], 12, 'bold'),
                         foreground='white',
                         background=colors['pastel_base'],  # #6BC4B0
                         borderwidth=0,
@@ -48,7 +70,7 @@ class AppStyles:
 
         # 2Pastel.TButton
         style.configure('2Pastel.TButton',
-                        font=('Arial', 11, 'bold'),
+                        font=(korean_font[0], 11, 'bold'),
                         foreground='white',
                         background=colors['text_medium'],
                         borderwidth=0,
@@ -63,7 +85,7 @@ class AppStyles:
 
         # 3Pastel.TButton > 미리보기 창 구간저장 버튼 스타일
         style.configure('3Pastel.TButton',
-                        font=('Arial', 11, 'bold'),
+                        font=(korean_font[0], 11, 'bold'),
                         foreground='white',
                         background=colors['text_medium'],  # #4A7C69
                         borderwidth=0,
@@ -80,7 +102,7 @@ class AppStyles:
 
         # 파스텔 아웃라인 (서브 버튼용)
         style.configure('PastelGreenOutline2.TButton',
-                        font=('Arial', 11, 'bold'),
+                        font=(korean_font[0], 11, 'bold'),
                         foreground=colors['pastel_light'],
                         background='white',
                         borderwidth=2,
@@ -98,7 +120,7 @@ class AppStyles:
 
         # 파스텔 아웃라인 (서브 버튼용)
         style.configure('PastelGreenOutline.TButton',
-                        font=('Arial', 11, 'bold'),
+                        font=(korean_font[0], 11, 'bold'),
                         foreground=colors['pastel_medium'],
                         background='white',
                         borderwidth=2,
@@ -116,7 +138,7 @@ class AppStyles:
 
         # 딥틸 > 메인탭 구간저장 버튼 스타일
         style.configure('DeepTeal.TButton',
-                        font=('Arial', 11, 'bold'),
+                        font=(korean_font[0], 11, 'bold'),
                         foreground='white',  # 글씨 햐얀색
                         background=colors['deep_teal'],  # #007e7f
                         borderwidth=0,
@@ -132,7 +154,7 @@ class AppStyles:
 
         # 포레스트 그린
         style.configure('ForestGreen.TButton',
-                        font=('Arial', 12, 'bold'),
+                        font=(korean_font[0], 12, 'bold'),
                         foreground='white',  # 글씨 햐얀색
                         background=colors['pastel_light'],    # 파스텔 녹색 배경
                         borderwidth=0,
@@ -150,7 +172,7 @@ class AppStyles:
         # ============재생 버튼 스타일 ==============
         # 재생 버튼 - Success Outline 스타일 (ttkbootstrap 스타일 구현)
         style.configure('PlayOutline.TButton',
-                        font=('Arial', 13, 'bold'),
+                        font=(korean_font[0], 13, 'bold'),
                         foreground='#198754',  # Bootstrap success 색상
                         background='white',
                         borderwidth=2,
@@ -167,7 +189,7 @@ class AppStyles:
 
         # 정지 버튼 - Danger Outline 스타일
         style.configure('StopOutline.TButton',
-                        font=('Arial', 13, 'bold'),
+                        font=(korean_font[0], 13, 'bold'),
                         foreground='#dc3545',  # Bootstrap danger 색상
                         background='white',
                         borderwidth=2,
@@ -184,7 +206,7 @@ class AppStyles:
 
         # 파일 선택 버튼 - Primary 스타일 (폰트 확대)
         style.configure('InfoLarge.TButton',
-                        font=('Arial', 11, 'bold'),
+                        font=(korean_font[0], 11, 'bold'),
                         foreground='white',
                         background='#042d4a',  # 더 진한 색상을 기본으로
                         borderwidth=0,

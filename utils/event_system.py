@@ -8,9 +8,6 @@ class EventSystem:
     def __init__(self):
         self._listeners: Dict[str, List[Callable]] = defaultdict(list)
 
-    def __init__(self):
-        self._listeners: Dict[str, List[Callable]] = defaultdict(list)
-
     def subscribe(self, event_name: str, callback: Callable) -> None:
         """이벤트 구독"""
         self._listeners[event_name].append(callback)
@@ -80,3 +77,14 @@ class Events:
     AUDIO_EXTRACTION_PROGRESS = "audio_extraction_progress"  # 오디오 추출 진행
     AUDIO_EXTRACTION_COMPLETE = "audio_extraction_complete"  # 오디오 추출 완료
     AUDIO_EXTRACTION_ERROR = "audio_extraction_error"  # 오디오 추출 오류
+
+    # VLC 관련 이벤트
+    VLC_TIME_CHANGED = "vlc_time_changed"  # 비디오 시간 변경
+    VLC_LENGTH_CHANGED = "vlc_length_changed"  # 비디오 길이 변경
+
+    # 새로운 구조 관련 이벤트
+    SEGMENT_CHANGED = "segment_changed"  # 구간 변경
+    SEGMENT_ADDED = "segment_added"  # 구간 추가
+    SEGMENT_REMOVED = "segment_removed"  # 구간 제거
+    SEGMENT_UPDATED = "segment_updated"  # 구간 업데이트
+    SEGMENTS_CLEARED = "segments_cleared"  # 구간 초기화
