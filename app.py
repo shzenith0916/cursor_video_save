@@ -1,21 +1,19 @@
-import os
-import numpy as np
-import csv
-from PIL import Image, ImageTk
-import threading
-
 import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox, filedialog
+
 from utils.styles import AppStyles
+from utils.ui_utils import UiUtils
 from utils.utils import VideoUtils
 from utils.vlc_utils import VLCPlayer
+from utils.event_system import event_system, Events
+
 from ui_components import create_tabs
 from ui_components.preview_window import PreviewWindow
-from utils.ui_utils import UiUtils
-from utils.event_system import event_system, Events
+
 import cv2
+import threading
 
 
 class VideoEditorApp:
@@ -59,11 +57,26 @@ class VideoEditorApp:
         # 이벤트 리스너 등록
         self.setup_event_listeners()
 
+        # 애플리케이션 종료 시 VLC 정리
+        self.root.protocol("WM_DELETE_WINDOW", self._handle_close)
+
         print("App 초기화 완료")
+
+    def _handle_close(self):
+        """애플리케이션 종료 시 VLC 정리"""
+        # VLC 플레이어 정리
+        print("App: 종료 프로세스 시작...")
+        if hasattr(self, 'vlc_player') and self.vlc_player:
+            self.vlc_player.cleanup()
+            print("App: VLC 플레이어 리소스 정리 완료")
+        self.root.quit()
+        self.root.destroy()
+        print("App: 종료 프로세스 완료")
 
     def setup_event_listeners(self):
         """이벤트 리스너 설정"""
         event_system.subscribe(Events.VIDEO_LOADED, self._on_video_loaded)
+        print(f"[app.py] event_system id: {id(event_system)}")
         event_system.subscribe(
             Events.VIDEO_PLAY_TOGGLE, self.handle_play_toggle)
         event_system.subscribe(Events.VIDEO_STOP, self.stop_video)
@@ -71,54 +84,94 @@ class VideoEditorApp:
         event_system.subscribe(Events.SEGMENT_END_SET, self.set_end_time)
 
     def _on_video_loaded(self, **kwargs):
-        """비디오 로드 이벤트 처리"""
+        """비디오 로드 이벤트 처리하고 VLC 플레이어 초기화"""
+
+        print(f"_on_video_loaded called, kwargs={kwargs}")
         file_path = kwargs.get('path')
+
+        if not file_path:
+            print("App: 파일경로 없음")
+            return False
+
         if file_path:
             self.video_path = file_path
-            print(f"비디오 로드 시작: {file_path}")
 
             try:
                 # 1. video_canvas가 생성되어 있는지 확인
-                if not hasattr(self, 'video_canvas') or not self.video_canvas:
-                    print("App: video_canvas가 아직 생성되지 않음. UI 초기화를 기다립니다.")
+                if not self._validate_video_canvas():
                     return False
-
                 # 2. VLCPlayer 인스턴스 생성
-                if not hasattr(self, 'vlc_player') or not self.vlc_player:
-                    print("App: VLCPlayer 인스턴스 생성")
-                    self.vlc_player = VLCPlayer()
-
-                # 3. VLC 플레이어가 제대로 초기화되었는지 확인
-                if not self.vlc_player or not hasattr(self.vlc_player, 'media_player') or not self.vlc_player.media_player:
-                    print("App: VLC 플레이어 초기화 실패")
+                if not self._create_vlc_player():
                     return False
+                # 3. video_canvas를 VLC 플레이어에 연결
+                if not self._connect_canvas_to_vlc():
+                    return False
+                self._load_video_async()
+                print("App: 비디오 로드 요청 완료 (비동기처리)")
+                return True
+            except Exception as e:
+                print(f"App: 비디오 로드 중 오류 발생 {e}")
+                import traceback
+                traceback.print_exc()
+                return False
 
-                # 4. video_canvas를 VLC에 연결
-                print("App: video_canvas를 VLC 플레이어에 연결")
-                self.vlc_player.set_video_widget(self.video_canvas)
+    def _validate_video_canvas(self):
+        """video_canvas가 생성되어 있는지 확인"""
 
-                # 5. 비디오 로드 (이게 반드시 마지막이어야 함!)
-                print("App: 비디오 로드 시작")
+        if not hasattr(self, 'video_canvas') or not self.video_canvas:
+            print("App: video_canvas가 아직 생성되지 않음. UI 초기화를 기다립니다.")
+            return False
+        return True
+
+    def _create_vlc_player(self):
+        """VLCPlayer 인스턴스 생성 및 제대로 초기화 되었는지 확인"""
+
+        # VLCPlayer 인스턴스 생성
+        if not hasattr(self, 'vlc_player') or not self.vlc_player:
+            print("App: VLCPlayer 인스턴스 생성")
+            self.vlc_player = VLCPlayer()
+        # VLC 플레이어가 제대로 초기화되었는지 확인
+            if not self.vlc_player or not hasattr(self.vlc_player, 'media_player') or not self.vlc_player.media_player:
+                print("App: VLC 플레이어 초기화 실패")
+                return False
+        return True
+
+    def _connect_canvas_to_vlc(self):
+        """video_canvas를 VLC 플레이어에 연결"""
+        try:
+            print("App: video_canvas를 VLC 플레이어에 연결")
+            self.vlc_player.set_video_widget(self.video_canvas)
+            return True
+
+        except Exception as e:
+            print(f"App: video_canvas를 VLC 플레이어에 연결 중 오류 발생: {e}")
+            return False
+
+    def _load_video_async(self):
+        """별도 스레드에서 비디오 로드 처리 (UI 블록 방지)"""
+
+        def load_video_async():
+            print("App: 비디오 로드 시작")
+            try:
                 if self.vlc_player.load_video(self.video_path):
                     # 비디오 정보 설정
                     self.video_length = self.vlc_player.get_duration()
                     print(f"App: 비디오 로드 성공. 길이: {self.video_length}초")
 
-                    # UI 업데이트 이벤트 발행
-                    event_system.emit(Events.UI_UPDATE,
-                                      video_path=self.video_path,
-                                      duration=self.video_length,
-                                      component="video_info")
-                    return True
+                    # UI 업데이트는 메인 스레드에서 처리
+                    self.root.after(0, lambda: event_system.emit(
+                        Events.UI_UPDATE,
+                        video_path=self.video_path,
+                        duration=self.video_length,
+                        component="video_info"
+                    ))
                 else:
                     print("App: 비디오 로드 실패")
-                    return False
-
             except Exception as e:
-                print(f"App: 비디오 로드 중 오류 발생: {e}")
-                import traceback
-                traceback.print_exc()
-                return False
+                print(f"App: 비동기 비디오 로드 오류: {e}")
+
+        # 비동기로 비디오 로드
+        threading.Thread(target=load_video_async, daemon=True).start()
 
     def handle_play_toggle(self, **kwargs):
         """재생/일시정지 토글 이벤트 처리"""
@@ -281,8 +334,7 @@ class VideoEditorApp:
     def _on_preview_window_close(self):
         """미리보기 창이 닫힐 때 호출되는 콜백 함수"""
         if hasattr(self, 'preview_window') and self.preview_window is not None:
-            # ui_components/preview_window.py 파일안 280-310 줄에 on_close() 메서드 정의되어 있음
-            self.preview_window.on_close()
+            self.preview_window._handle_close()
             self.preview_window = None
 
     def play_selection(self):

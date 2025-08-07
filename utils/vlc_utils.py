@@ -88,23 +88,40 @@ class VLCPlayer:
             if self.video_widget:
                 print(f"VLC 로드: 비디오 위젯 발견, 임베딩 시도")
                 self.embed_video()
-                # 임베딩 후 약간의 지연
-                time.sleep(0.2)
+                # 임베딩 후 최소한의 지연만 (0.2초 → 0.05초)
+                time.sleep(0.05)
             else:
                 print(f"VLC 로드: 비디오 위젯이 설정되지 않음")
 
-            # 미디어 길이 정보를 가져오기 위해 잠시만 재생 후 즉시 정지
-            # 하지만 임베딩이 완료된 후에만
-            if self.video_widget:
-                print("VLC 로드: 미디어 정보 로드를 위해 잠시 재생")
-                self.media_player.play()
-                time.sleep(0.3)  # 미디어 정보가 로드될 때까지 대기
-                self.media_player.stop()  # pause 대신 stop 사용
-                print("VLC 로드: 미디어 정보 로드 완료, 정지")
+            # 미디어 길이 정보 업데이트 (재생하지 않고 파싱만으로)
+            try:
+                # 미디어 파싱으로 길이 정보 시도
+                duration_ms = self.media.get_duration()
+                if duration_ms > 0:
+                    self.duration = duration_ms / 1000
+                    print(f"VLC 로드: 파싱으로 길이 정보 획득 - {self.duration}초")
+                else:
+                    # 파싱 실패 시에만 최소한의 재생으로 정보 획득
+                    print("VLC 로드: 파싱 실패, 최소 재생으로 길이 정보 획득 시도")
+                    if self.video_widget:  # 임베딩된 경우에만
+                        self.media_player.play()
+                        # 매우 짧은 시간만 대기
+                        import threading
 
-            # 길이 정보 업데이트
-            self.duration = self.media.get_duration(
-            ) / 1000 if self.media.get_duration() > 0 else 0
+                        def stop_after_delay():
+                            time.sleep(0.1)  # 0.3초 → 0.1초로 단축
+                            self.media_player.stop()
+                            print("VLC 로드: 길이 정보 로드 완료, 정지")
+
+                        # 별도 스레드에서 정지 처리
+                        threading.Thread(
+                            target=stop_after_delay, daemon=True).start()
+
+                        # 메인 스레드는 즉시 진행
+                        self.duration = 0  # 일단 0으로 설정, 나중에 업데이트
+            except Exception as e:
+                print(f"VLC 로드: 길이 정보 획득 실패 - {e}")
+                self.duration = 0
 
             print(f"VLC 비디오 로드 완료: {video_path}")
             return True
@@ -132,9 +149,9 @@ class VLCPlayer:
                 self.media_player.set_hwnd(self.hwnd)
                 print(f"VLC 임베딩: Windows 임베딩 완료 - HWND={self.hwnd}")
 
-                # 임베딩 후 약간의 지연을 두고 재생 상태 확인
+                # 임베딩 후 최소한의 지연만
                 import time
-                time.sleep(0.2)
+                time.sleep(0.02)  # 0.2초 → 0.02초로 대폭 단축
 
                 # 임베딩 확인
                 current_hwnd = self.media_player.get_hwnd()
@@ -159,8 +176,16 @@ class VLCPlayer:
         """재생 시작"""
         if self.media_player and self.media:
             print("VLC 재생 시작")
+
+            # 임베딩 상태 확인 (디버깅용)
+            if self.video_widget and self.is_embedded():
+                print("VLC: 임베딩된 상태에서 재생 시작")
+            else:
+                print("VLC: 경고 - 임베딩되지 않은 상태에서 재생 시도")
+
             self.media_player.play()
             self.is_playing = True
+            print("VLC: 재생 상태 변경 완료")
         else:
             print("미디어 플레이어 또는 미디어가 없습니다.")
 

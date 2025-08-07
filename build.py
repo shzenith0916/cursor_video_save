@@ -31,9 +31,9 @@ def check_dependencies():
     """필요한 의존성이 설치되어 있는지 확인합니다."""
     try:
         import PyInstaller
-        print("✓ PyInstaller 설치됨")
+        print("PyInstaller 설치됨")
     except ImportError:
-        print("❌ PyInstaller가 설치되지 않음")
+        print("PyInstaller가 설치되지 않음")
         print("설치 명령: pip install pyinstaller")
         return False
 
@@ -50,9 +50,9 @@ def check_dependencies():
     for package_name, import_name in dependencies.items():
         try:
             __import__(import_name)
-            print(f"✓ {package_name} 설치됨")
+            print(f"{package_name} 설치됨")
         except ImportError:
-            print(f"❌ {package_name} 설치되지 않음 (import: {import_name})")
+            print(f"{package_name} 설치되지 않음 (import: {import_name})")
             return False
 
     return True
@@ -60,7 +60,8 @@ def check_dependencies():
 
 def create_inno_setup_script(build_folder):
     """Inno Setup 스크립트(.iss)를 생성합니다."""
-    iss_content = f'''[Setup]
+    iss_content = f'''
+[Setup]
 AppName=VideoPlayer
 AppVersion=1.0
 AppPublisher=RSREHAB co., ltd.
@@ -104,8 +105,8 @@ Filename: "{{app}}\\비디오플레이어.exe"; Description: "프로그램 실�
     with open(iss_file, 'w', encoding='utf-8-sig') as f:  # BOM 포함하여 저장
         f.write(iss_content)
 
-    print(f"✓ Inno Setup 스크립트 생성됨: {iss_file}")
-    print("📋 인스톨러 생성 방법:")
+    print(f"Inno Setup 스크립트 생성됨: {iss_file}")
+    print("인스톨러 생성 방법:")
     print("1. Inno Setup을 설치하세요: https://jrsoftware.org/isinfo.php")
     print(f"2. Inno Setup에서 {iss_file}를 열고 컴파일하세요")
     print("3. installer 폴더에 설치파일이 생성됩니다")
@@ -130,7 +131,7 @@ def compile_inno_setup():
             break
 
     if not compiler_path:
-        print("⚠️  Inno Setup 컴파일러를 찾을 수 없습니다.")
+        print("⚠️ Inno Setup 컴파일러를 찾을 수 없습니다.")
         print("수동으로 설치파일을 생성해주세요.")
         return False
 
@@ -150,8 +151,8 @@ def compile_inno_setup():
                     encoding=encoding,
                     errors='ignore'  # 인코딩 오류 무시
                 )
-                print("✓ 인스톨러 컴파일 성공!")
-                print("📁 installer 폴더를 확인하세요")
+                print("인스톨러 컴파일 성공!")
+                print("installer 폴더를 확인하세요")
 
                 # 성공한 경우 출력 표시
                 if result.stdout:
@@ -164,17 +165,17 @@ def compile_inno_setup():
                 print(f"인코딩 {encoding} 실패, 다음 인코딩 시도...")
                 continue
             except subprocess.CalledProcessError as e:
-                print(f"❌ 인스톨러 컴파일 실패 (인코딩: {encoding}): {e}")
+                print(f"인스톨러 컴파일 실패 (인코딩: {encoding}): {e}")
                 if e.stderr:
                     print("에러 메시지:")
                     print(e.stderr)
                 return False
 
-        print("❌ 모든 인코딩 시도 실패")
+        print("모든 인코딩 시도 실패")
         return False
 
     except Exception as e:
-        print(f"❌ 인스톨러 컴파일 중 예외 발생: {e}")
+        print(f"인스톨러 컴파일 중 예외 발생: {e}")
         return False
 
 

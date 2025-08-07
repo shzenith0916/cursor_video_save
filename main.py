@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 import app
 from app import VideoEditorApp
+
+import tkinter as tk
+from tkinter import font
 import ttkbootstrap as ttk
 from ttkbootstrap import Window
 
@@ -29,15 +32,13 @@ except locale.Error as e:
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 if __name__ == "__main__":
-    # 한글 폰트 설정
-    import tkinter as tk
-    from tkinter import font
 
     # Ttkbootstrap Window 명시적 사용
     root = ttk.Window(themename="flatly")
 
     # 시스템 폰트 확인 및 설정
     available_fonts = font.families()
+    # 한글 폰트 목록 선언언
     korean_fonts = ['Malgun Gothic', '맑은 고딕',
                     'Gulim', '굴림', 'Dotum', '돋움', 'Batang', '바탕']
 
@@ -59,5 +60,6 @@ if __name__ == "__main__":
     style.configure('TLabel', font=default_font)
     style.configure('TEntry', font=default_font)
 
+# 정상적으로 mainloop가 호출되는 라인인
     app = VideoEditorApp(root)
     root.mainloop()

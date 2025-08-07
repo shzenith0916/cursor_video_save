@@ -22,15 +22,23 @@ class MainTabCommandHandler:
 
     def on_file_select(self):
         """파일 선택 버튼 클릭 시"""
+
+        print(f"[command_handlers.py] event_system id: {id(event_system)}")
         file_path = filedialog.askopenfilename(
             title="비디오 파일 선택창",
             filetypes=[("Video Files", "*.mp4 *.avi")]
         )
         if file_path:
-            # main_tab의 video_path_var 업데이트
+
+            # main_tab의 video_path_var 업데이트 및 플래그 리셋
             if self.main_tab and hasattr(self.main_tab, 'video_path_var'):
                 self.main_tab.video_path_var.set(file_path)
+                # 새 비디오 로드 시 플래그 리셋 (버튼 활성화를 위해)
+                self.main_tab._video_info_updated = False
+
+            print(f"[command_handlers.py] emit file_path: {file_path}")
             event_system.emit(Events.VIDEO_LOADED, path=file_path)
+            print("[command_handlers.py] emit called")
 
     def on_play_click(self):
         """재생 버튼 클릭 시. VIDEO_PLAY_TOGGLE 이벤트를 발생시킵니다."""

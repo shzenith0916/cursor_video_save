@@ -9,7 +9,7 @@ class VideoExtractor:
     """비디오 구간 추출을 담당하는 클래스"""
 
     @staticmethod
-    def build_ffmpeg_command(input_path, output_path, start_time, end_time, ffmpeg_codec_copy=True):
+    def build_ffmpeg_command(input_path, output_path, start_time, end_time):
         """ffmpeg 명령어 구성"""
 
         command = [
@@ -20,14 +20,13 @@ class VideoExtractor:
             '-to', str(end_time)
         ]
 
-        if ffmpeg_codec_copy:
-            command.extend(['-c', 'copy'])  # 코덱 복사, 처리가 빠름
-        else:
-            command.extend([
-                '-c:v', 'libx264',  # 비디오 코덱
-                '-c:a', 'aac',  # 오디오 코덱
-                '-strict', 'experimental'  # 현재 버전에서 사용 가능한 최신 옵션
-            ])
+        # if ffmpeg_codec_copy:
+        #     command.extend(['-c', 'copy'])  # 코덱 복사, 처리가 빠름
+        command.extend([
+            '-c:v', 'libx264',  # 비디오 코덱
+            '-c:a', 'aac',  # 오디오 코덱
+            '-strict', 'experimental'  # 현재 버전에서 사용 가능한 최신 옵션
+        ])
 
         # 출력파일 경로 추가
         command.append(output_path)

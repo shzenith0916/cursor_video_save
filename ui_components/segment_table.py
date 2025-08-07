@@ -362,7 +362,7 @@ class SegmentTable:
 
         if file_path:
             try:
-                with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                with open(file_path, 'w', newline='', encoding='cp949') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(
                         ['파일명', '시작 시간', '종료 시간', '구간 길이', '타입', '의견1', '의견2'])

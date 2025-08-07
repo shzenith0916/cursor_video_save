@@ -2,16 +2,18 @@ import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox, filedialog
-import cv2
+
+import os
 import threading
 import time
-import os
-from PIL import Image, ImageTk
-from utils.utils import VideoUtils
-from .segment_table import SegmentTable
-from utils.event_system import event_system, Events
 import csv
 import asyncio
+
+from utils.vlc_utils import VLCPlayer
+from utils.utils import VideoUtils
+
+from .segment_table import SegmentTable
+from utils.event_system import event_system, Events
 
 
 class PreviewWindow:
@@ -52,41 +54,32 @@ class PreviewWindow:
         self.window.protocol("WM_DELETE_WINDOW", self._handle_close)
 
     def _init_video_properties(self):
-        """비디오 속성 초기화"""
-        # 성능 최적화 관련 비디오 속성
-        self.target_fps = 30
-        self.frame_skip = 1
-        self.frame_count = 0
-
-        # 변수로 받은 start_time을 넣어주어야 함.
+        """비디오 속성 초기화 - VLC 기반"""
+        # 현재 재생 위치 추적
         self.current_time = self.start_time
-        self.update_thread = None
 
     def _init_video_controller(self):
-        """비디오 컨트롤러(변수) 초기화"""
+        """비디오 컨트롤러(변수) 초기화 - VLC 기반"""
         # 비디오 관련 변수 초기화
-        self.cap = None
-        self.fps = None
+        self.vlc_player = None
         self.is_playing = False
-        self.current_image = None
 
-        # 비디오 초기화
-        self.cap, self.fps = VideoUtils.initialize_video(self.video_path)
-        if self.cap is None:
-            messagebox.showerror("오류", "비디오 초기화에 실패했습니다.")
+        # VLC 플레이어 초기화
+        try:
+            self.vlc_player = VLCPlayer()
+
+            if not self.vlc_player.load_video(self.video_path):
+                messagebox.showerror("오류", "비디오 초기화에 실패했습니다.")
+                self.window.destroy()
+                return
+
+            print(f"PreviewWindow: VLC 비디오 로드 완료 - {self.video_path}")
+
+        except Exception as e:
+            print(f"PreviewWindow: VLC 초기화 실패 - {e}")
+            messagebox.showerror("오류", f"비디오 초기화에 실패했습니다: {e}")
             self.window.destroy()
             return
-
-        # 비디오 속성 최적화
-        if self.cap and self.cap.isOpened():
-            self.original_fps = self.cap.get(cv2.CAP_PROP_FPS)
-            self.target_fps = VideoUtils.calculate_optimal_fps(
-                self.original_fps)
-            self.frame_skip = VideoUtils.calculate_frame_skip(
-                self.original_fps, self.target_fps)
-
-        # 초기 프레임 표시
-        self._show_frame_at_time(self.start_time)
 
     def _init_ui(self):
         """create_ui 메서드들 재구성한 UI 초기화"""
@@ -121,16 +114,29 @@ class PreviewWindow:
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
 
     def _create_video_section(self):
-        """비디오 플레이 영역 생성"""
+        """비디오 플레이 영역 생성 - VLC 기반"""
         self.video_frame = tk.Frame(self.main_frame, bg="black", width=500,
                                     relief="solid", borderwidth=2)
         self.video_frame.pack(side="left", fill=tk.BOTH, expand=False)
         self.video_frame.pack_propagate(False)  # 크기 고정
 
-        # VideoUtils 사용하여 비디오레이블 생성
-        self.video_label = VideoUtils.create_video_label(self.video_frame)
-        self.video_label.pack(expand=True, fill="both")
-        self.video_label.config(bg="black")
+        # # VideoUtils 사용하여 비디오레이블 생성
+        # self.video_label = VideoUtils.create_video_label(self.video_frame)
+        # self.video_label.pack(expand=True, fill="both")
+        # self.video_label.config(bg="black")
+
+        # VLC용 캔버스 생성
+        self.video_canvas = tk.Canvas(self.video_frame, bg="black")
+        self.video_canvas.pack(expand=True, fill="both")
+
+        # VLC 플레이어에 위젯 연결
+        if self.vlc_player:
+            self.vlc_player.set_video_widget(self.video_canvas)
+            print("PreviewWindow: VLC 플레이어에 캔버스 연결 완료")
+
+            # 시작 위치로 이동 후 일시정지
+            self.vlc_player.set_position(self.start_time)
+            print(f"PreviewWindow: 시작 위치로 이동 - {self.start_time}초")
 
     def _create_segment_table_section(self):
         """구간 테이블 생성"""
@@ -162,7 +168,7 @@ class PreviewWindow:
         # 재생/일시정지 버튼 - PlayOutline 스타일 사용
         self.play_button = ttk.Button(
             self.control_left,
-            text="⏸ 일시정지",
+            text="► 재생",
             style="PlayOutline.TButton",
             command=self._handle_toggle_play,
             width=10
@@ -217,86 +223,74 @@ class PreviewWindow:
     # 비디오 재생 제어 메서드들
     # =================================================================
 
-    def _show_frame_at_time(self, time_sec):
-        """지정된 시간의 프레임 표시 (최적화)"""
-        try:
-            ret, frame = VideoUtils.read_frame_at_position(
-                self.cap, time_sec, self.fps
-            )
-
-            if ret:
-                # 최적화 메서드 사용
-                self._display_frame(frame)
-                self.current_time = time_sec
-                self._update_position_label()
-
-            else:
-                print(f"Failed to read frame at {time_sec}s")
-
-        except Exception as e:
-            print(f"Error showing frame at time {time_sec}: {e}")
-
-    def _display_frame(self, frame):
-        """프레임을을 화면 표시 (최적화)"""
-        try:
-            # VideoUtils의 최적화된 변환 메서드 사용
-            photo = VideoUtils.convert_frame_to_photo_optimized(frame)
-            if photo:
-                self.video_label.config(image=photo)
-                self.video_label.image = photo  # 참조 유지
-        except Exception as e:
-            print(f"Error in show_frame_optimized: {e}")
-
-    def _update_position_label(self):
-        """위치 레이블 업데이트"""
-        current_str = VideoUtils.format_time(self.current_time)
-        end_str = VideoUtils.format_time(self.end_time)
-        self.position_label.config(text=f"{current_str} / {end_str}")
+    # OpenCV 기반 프레임 표시 메서드들은 VLC로 대체됨
+    # VLC는 자체적으로 비디오 렌더링을 처리함
 
     def _start_playback(self):
-        """재생 시작하는 작업 수행 메서드"""
+        """재생 시작하는 작업 수행 메서드 - VLC 기반"""
+        if not self.vlc_player:
+            print("PreviewWindow: VLC 플레이어가 없습니다")
+            return
 
-        # 재생 시작 시 현재 위치가 종료 시간이면 시작 시간으로 이동
-        if self.current_time >= self.end_time:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES,
-                         int(self.start_time * self.fps))
+        # 실제 VLC 플레이어 위치 확인
+        actual_position = self.vlc_player.get_position()
+
+        # 재생 시작 시 현재 위치가 종료 시간을 넘었거나 구간 밖이면 시작 시간으로 이동
+        if actual_position >= self.end_time or actual_position < self.start_time:
+            self.vlc_player.set_position(self.start_time)
             self.current_time = self.start_time
-            self._show_frame_at_time(self.start_time)
+            print(
+                f"PreviewWindow: 시작 위치로 리셋 - {self.start_time}초 (이전 위치: {actual_position}초)")
+        else:
+            self.current_time = actual_position
+            print(f"PreviewWindow: 현재 위치에서 재생 계속 - {actual_position}초")
 
         self.is_playing = True
         self.play_button.config(text="|| 일시정지")
-        # after 메서드를 사용하여 프레임 업데이트 시작
-        self._frame_update_loop()
+
+        # VLC 재생 시작
+        self.vlc_player.play()
+        print("PreviewWindow: VLC 재생 시작")
+
+        # 구간 종료 모니터링 시작
+        self._start_segment_monitoring()
+
+    def _start_segment_monitoring(self):
+        """구간 재생 모니터링 시작"""
+        if self.is_playing and self.vlc_player:
+            # 현재 위치 확인
+            current_position = self.vlc_player.get_position()
+
+            # current_time 동기화
+            self.current_time = current_position
+
+            # 구간 종료 시 플레이어 정지
+            if current_position >= self.end_time:
+                self._pause_playback()
+                print(f"PreviewWindow: 구간 종료 도달 - {current_position}초")
+                return
+
+            # 위치 레이블 업데이트
+            self.current_string = VideoUtils.format_time(current_position)
+            self.end_string = VideoUtils.format_time(self.end_time)
+            self.position_label.config(
+                text=f"{self.current_string} / {self.end_string}")
+
+            # 다음 체크 스케줄링 (100ms마다)
+            self.window.after(100, self._start_segment_monitoring)
 
     def _pause_playback(self):
-        """재생 일시정지 작업 수행 메서드"""
+        """재생 일시정지 작업 수행 메서드 - VLC 기반"""
+        if not self.vlc_player:
+            print("PreviewWindow: VLC 플레이어가 없습니다")
+            return
 
         self.is_playing = False
         self.play_button.config(text="► 재생")
 
-    def _frame_update_loop(self):
-        """연속 재생을 위한 재귀 호출. 프레임 업데이트 루프"""
-        if not self.is_playing:
-            return
-
-        # 현재시간 확인 - 구간 끝에 도달하면 재생 중지
-        if self.current_time >= self.end_time:
-            self._pause_playback()
-            return
-
-        # 프레임 읽기
-        ret, frame = self.cap.read()
-        if ret:
-            self._display_frame(frame)
-            self.current_time = self.cap.get(
-                cv2.CAP_PROP_POS_FRAMES) / self.fps
-            self._update_position_label()
-
-            # 다음 프레임 스케줄링
-            frame_interval = int(1000/self.target_fps)
-            self.window.after(frame_interval, self._frame_update_loop)
-        else:
-            self.pause_play()
+        # VLC 일시정지
+        self.vlc_player.pause()
+        print("PreviewWindow: VLC 플레이어 정지")
 
     def start_auto_play(self):
         """자동 재생 시작"""
@@ -380,10 +374,13 @@ class PreviewWindow:
         self.window.lift()
 
     def _handle_close(self):
-        """창 닫기 이벤트. app.py에서 참조하는 메서드"""
-        self.is_playing = False  # 스레드 루프 종료 신호
-        if self.cap:
-            self.cap.release()
+        """창 닫기 이벤트. app.py에서 참조하는 메서드 - VLC 기반"""
+        self.is_playing = False  # 모니터링 루프 종료 신호
+
+        # VLC 플레이어 정리
+        if self.vlc_player:
+            self.vlc_player.cleanup()  # cleanup()이 내부적으로 stop()도 호출함
+            print("PreviewWindow: VLC 플레이어 리소스 정리 완료")
 
         # 이벤트 구독 해제
         event_system.unsubscribe(
@@ -391,9 +388,3 @@ class PreviewWindow:
         event_system.unsubscribe(
             Events.SEGMENT_SAVED, self._on_segment_saved)
         self.window.destroy()
-
-# 호환성을 위해서 원래 on_close 메서드 유지. 내부적으로는 _handle_close를 호출하도록 함.
-
-    def on_close(self):
-        """기존 메서드 호환성 유지"""
-        self._handle_close()
