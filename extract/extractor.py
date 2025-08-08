@@ -20,8 +20,6 @@ class VideoExtractor:
             '-to', str(end_time)
         ]
 
-        # if ffmpeg_codec_copy:
-        #     command.extend(['-c', 'copy'])  # 코덱 복사, 처리가 빠름
         command.extend([
             '-c:v', 'libx264',  # 비디오 코덱
             '-c:a', 'aac',  # 오디오 코덱
@@ -35,8 +33,8 @@ class VideoExtractor:
 
     @staticmethod
     def extract_segment(input_video_path, output_video_path, start_time, end_time,
-                        progress_callback=None, ffmpeg_codec_copy=True):
-        """ 주어진 시간 범위에 해당하는 비디오 세그먼트를 추출하는 함수
+                        progress_callback=None):
+        """ 주어진 시간 범위에 해당하는 비디오 세그먼트를 추출하는 함수 (항상 재인코딩)
 
         Args:
             input_video_path (str): 입력 비디오 파일 경로
@@ -44,7 +42,6 @@ class VideoExtractor:
             start_time (str or float): 시작 시간 (HH:MM:SS)
             end_time (str or float): 종료 시간 (HH:MM:SS)
             progress_callback (function): 진행률 콜백 함수
-            ffmpeg_codec_copy (bool): ffmpeg 코덱 복사 사용 여부
         Returns:
             dict: {'sucesss': bool, 'message': str, 'output_path': str}
         """
@@ -71,8 +68,7 @@ class VideoExtractor:
                 input_video_path,
                 output_video_path,
                 start_time_str,
-                end_time_str,
-                ffmpeg_codec_copy
+                end_time_str
             )
 
             # 진행률 콜백 함수 처리
@@ -276,7 +272,6 @@ class ExtractConfig:
     def __init__(self):
         self.default_output_dir = None
         self.output_format = 'mp4'  # '*.avi' -> 'mp4' 확장자만 표기하기
-        self.use_codec_copy = True
         self.create_subfolders = False
         self.filename_template = "{basename}_{start}_{end}"
 

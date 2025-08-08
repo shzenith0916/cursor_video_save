@@ -608,21 +608,22 @@ class NewTab(BaseTab):
             # 시작 상태 업데이트
             self.update_progress_safe(0, "추출 시작...", "시작...")
 
-            # VideoExtractor로 추출
+            # VideoExtractor로 추출 (코덱 복사 옵션 제거)
             result = VideoExtractor.extract_segment(
                 input_video_path=input_path,
                 output_video_path=output_path,
                 start_time=segment_info['start'],
                 end_time=segment_info['end'],
-                progress_callback=self.extraction_progress_callback,
-                ffmpeg_codec_copy=self.extract_config.use_codec_copy
+                progress_callback=self.extraction_progress_callback
             )
 
             # 결과 표시
             self.frame.after(0, lambda: self.show_extraction_result(result))
 
         except Exception as e:
-            self.frame.after(0, lambda: self.show_extraction_error(e))
+            # 오류 발생 시, lambda 기본 인자를 사용하여 현재의 e 값을 캡처
+            self.frame.after(
+                0, lambda error=e: self.show_extraction_error(error))
 
     def extraction_progress_callback(self, msg):
         """추출 진행률 콜백"""

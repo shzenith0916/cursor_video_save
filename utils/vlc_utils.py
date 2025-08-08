@@ -185,6 +185,8 @@ class VLCPlayer:
 
             self.media_player.play()
             self.is_playing = True
+            event_system.emit(Events.PLAYER_STATE_CHANGED,
+                              is_playing=True, is_stopped=False)
             print("VLC: 재생 상태 변경 완료")
         else:
             print("미디어 플레이어 또는 미디어가 없습니다.")
@@ -195,6 +197,8 @@ class VLCPlayer:
             print("VLC 일시정지")
             self.media_player.pause()
             self.is_playing = False
+            event_system.emit(Events.PLAYER_STATE_CHANGED,
+                              is_playing=False, is_stopped=False)
         else:
             print("미디어 플레이어 또는 미디어가 없습니다.")
 
@@ -203,6 +207,8 @@ class VLCPlayer:
         if self.media_player and self.media:
             self.media_player.stop()
             self.is_playing = False
+            event_system.emit(Events.PLAYER_STATE_CHANGED,
+                              is_playing=False, is_stopped=True)
         else:
             print("미디어 플레이어 또는 미디어가 없습니다.")
 
@@ -211,6 +217,10 @@ class VLCPlayer:
         if self.media_player and self.duration > 0:
             vlc_position = max(0.0, min(1.0, position / self.duration))
             self.media_player.set_position(vlc_position)
+            # 위치 변경 후에는 '일시정지' 상태가 되므로, UI 업데이트를 위해 이벤트를 발생시킵니다.
+            self.is_playing = False
+            event_system.emit(Events.PLAYER_STATE_CHANGED,
+                              is_playing=False, is_stopped=False)
 
     def get_position(self):
         """현재 위치 반환 (초 단위)"""
@@ -248,17 +258,6 @@ class VLCPlayer:
                 'height': 0,
                 'codec': ''
             }
-
-            for track in tracks:
-                if track.type == vlc.TrackType.video:
-                    video_track = track.video
-                    video_info['width'] = getattr(video_track, 'width', 0)
-                    video_info['height'] = getattr(video_track, 'height', 0)
-                    num = getattr(video_track, 'frame_rate_num', 0)
-                    den = getattr(video_track, 'frame_rate_den', 0)
-                    video_info['fps'] = num / den if den > 0 else 0
-                    video_info['codec'] = getattr(video_track, 'codec', '')
-                    break
 
             return video_info
 

@@ -2,18 +2,16 @@ import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox, filedialog
-
+import os
+import cv2
+import threading
 from utils.styles import AppStyles
 from utils.ui_utils import UiUtils
 from utils.utils import VideoUtils
 from utils.vlc_utils import VLCPlayer
 from utils.event_system import event_system, Events
-
 from ui_components import create_tabs
 from ui_components.preview_window import PreviewWindow
-
-import cv2
-import threading
 
 
 class VideoEditorApp:
@@ -154,15 +152,11 @@ class VideoEditorApp:
             print("App: 비디오 로드 시작")
             try:
                 if self.vlc_player.load_video(self.video_path):
-                    # 비디오 정보 설정
-                    self.video_length = self.vlc_player.get_duration()
-                    print(f"App: 비디오 로드 성공. 길이: {self.video_length}초")
-
                     # UI 업데이트는 메인 스레드에서 처리
                     self.root.after(0, lambda: event_system.emit(
                         Events.UI_UPDATE,
                         video_path=self.video_path,
-                        duration=self.video_length,
+                        duration=self.vlc_player.duration,
                         component="video_info"
                     ))
                 else:

@@ -222,18 +222,19 @@ class MainTab(BaseTab):
 
     def _on_slider_drag(self, event):
         """슬라이더 드래그 중 - 시간 표시만 업데이트"""
-        if self.is_slider_dragging and hasattr(self.app, 'video_length') and self.app.video_length > 0:
+        if self.is_slider_dragging and hasattr(self.app, 'vlc_player') and self.app.vlc_player.duration > 0:
             # 슬라이더 값으로 시간 계산 (직접 시간 값 사용)
             current_time = self.progress_variable.get()
 
             # 시간 표시 업데이트
             time_str = VideoUtils.format_time(int(current_time))
-            total_time = VideoUtils.format_time(int(self.app.video_length))
+            total_time = VideoUtils.format_time(
+                int(self.app.vlc_player.duration))
             self.slider_label.config(text=f"{time_str} / {total_time}")
 
     def _on_slider_release(self, event):
         """슬라이더 놓을 시 - 실제 비디오 위치 동기화 - VLC 기반"""
-        if self.is_slider_dragging and hasattr(self.app, 'video_length') and self.app.video_length > 0:
+        if self.is_slider_dragging and hasattr(self.app, 'vlc_player') and self.app.vlc_player.duration > 0:
             # 슬라이더 값으로 시간 계산 (직접 시간 값 사용)
             target_time = self.progress_variable.get()
 
@@ -241,10 +242,6 @@ class MainTab(BaseTab):
             if hasattr(self.app, 'vlc_player') and self.app.vlc_player:
                 self.app.select_position(target_time)
                 print(f"MainTab: 슬라이더로 위치 변경 - {target_time}초")
-                # VLC가 일시정지 상태가 되므로, 이벤트 emit
-                print("emit PLAYER_STATE_CHANGED: is_playing=False, is_stopped=False")
-                event_system.emit(Events.PLAYER_STATE_CHANGED,
-                                  is_playing=False, is_stopped=False)
             # 드래그 상태 해제
             self.is_slider_dragging = False
 
@@ -260,7 +257,7 @@ class MainTab(BaseTab):
                                       state=tk.DISABLED)
         self.play_button.pack(side=tk.LEFT, padx=10, pady=2)
 
-        self.stop_button = ttk.Button(control_buttons_subframe, text="◼ 정지",
+        self.stop_button = ttk.Button(control_buttons_subframe, text="■ 정지",
                                       style="StopOutline.TButton",
                                       command=self.main_command_handler.on_stop_click, width=12,
                                       state=tk.DISABLED)
@@ -352,14 +349,14 @@ class MainTab(BaseTab):
         self._update_video_info_label()
 
         # 슬라이더 범위 업데이트
-        if hasattr(self.app, 'video_length') and self.app.video_length > 0:
-            self.update_slider_range(self.app.video_length)
-            print(f"MainTab: 슬라이더 범위 업데이트됨 - {self.app.video_length}초")
+        if hasattr(self.app, 'vlc_player') and self.app.vlc_player.duration > 0:
+            self.update_slider_range(self.app.vlc_player.duration)
+            print(f"MainTab: 슬라이더 범위 업데이트됨 - {self.app.vlc_player.duration}초")
 
             # 슬라이더 시간 표시 업데이트
             if hasattr(self, 'slider_label'):
                 total_time = VideoUtils.format_time(
-                    int(self.app.video_length))
+                    int(self.app.vlc_player.duration))
                 self.slider_label.config(text=f"00:00:00 / {total_time}")
 
         # 비디오가 새로 로드된 경우에만 플레이어 상태 이벤트 발생
@@ -381,22 +378,19 @@ class MainTab(BaseTab):
         if hasattr(self.app, 'video_path') and self.app.video_path:
             info_text = f"비디오 이름: {os.path.basename(self.app.video_path)}\n"
 
-            # VLC 플레이어에서 상세 정보 가져오기
-            if hasattr(self.app, 'vlc_player') and self.app.vlc_player:
-                video_info = self.app.vlc_player.get_video_info()
-                if video_info:
-                    if video_info.get('duration', 0) > 0:
-                        info_text += f"동영상 길이: {VideoUtils.format_time(int(video_info['duration']))}\n"
-                    if video_info.get('fps', 0) > 0:
-                        info_text += f"프레임 레이트: {video_info['fps']:.2f} fps\n"
-                    if video_info.get('width', 0) > 0 and video_info.get('height', 0) > 0:
-                        info_text += f"동영상 해상도: {video_info['width']} x {video_info['height']}\n"
-                    if video_info.get('codec'):
-                        info_text += f"코덱: {video_info['codec']}"
-
-            # 폴백: 기본 정보만 표시
-            elif hasattr(self.app, 'video_length') and self.app.video_length > 0:
-                info_text += f"동영상 길이: {VideoUtils.format_time(int(self.app.video_length))}"
+            # OpenCV를 사용하여 비디오 메타데이터 가져오기
+            video_info = VideoUtils.get_opencv_video_info(self.app.video_path)
+            if video_info:
+                if video_info.get('duration', 0) > 0:
+                    info_text += f"동영상 길이: {VideoUtils.format_time(int(video_info['duration']))}\n"
+                if video_info.get('fps', 0) > 0:
+                    info_text += f"프레임 레이트: {video_info['fps']:.2f} fps\n"
+                if video_info.get('width', 0) > 0 and video_info.get('height', 0) > 0:
+                    info_text += f"동영상 해상도: {video_info['width']} x {video_info['height']}\n"
+            else:
+                # 폴백: 기본 정보만 표시
+                if hasattr(self.app, 'vlc_player') and self.app.vlc_player.duration > 0:
+                    info_text += f"동영상 길이: {VideoUtils.format_time(int(self.app.vlc_player.duration))}"
 
             self.video_info_label.config(text=info_text)
 
@@ -405,8 +399,8 @@ class MainTab(BaseTab):
 
         video_name = os.path.basename(self.app.video_path) if hasattr(
             self.app, 'video_path') else "비디오"
-        duration_str = VideoUtils.format_time(int(self.app.video_length)) if hasattr(
-            self.app, 'video_length') else "알 수 없음"
+        duration_str = VideoUtils.format_time(int(self.app.vlc_player.duration)) if hasattr(
+            self.app, 'vlc_player') and self.app.vlc_player.duration > 0 else "알 수 없음"
 
         messagebox.showinfo("비디오 로드 성공",
                             f"비디오가 성공적으로 로드되었습니다!\n\n"
@@ -415,8 +409,8 @@ class MainTab(BaseTab):
 
     def _update_slider(self):
         """슬라이더 상태 업데이트"""
-        if hasattr(self.app, 'video_length') and self.app.video_length > 0:
-            self.update_slider_range(self.app.video_length)
+        if hasattr(self.app, 'vlc_player') and self.app.vlc_player.duration > 0:
+            self.update_slider_range(self.app.vlc_player.duration)
 
     def _update_segment_labels(self):
         """구간 라벨 업데이트"""
@@ -506,12 +500,13 @@ class MainTab(BaseTab):
         """VLC 시간 변경 이벤트 처리"""
         if not self.is_slider_dragging:
             # 슬라이더 업데이트
-            if hasattr(self.app, 'video_length') and self.app.video_length > 0:
+            if hasattr(self.app, 'vlc_player') and self.app.vlc_player.duration > 0:
                 self.progress_variable.set(time)
 
             # 시간 표시 업데이트
             time_str = VideoUtils.format_time(int(time))
-            total_time = VideoUtils.format_time(int(self.app.video_length))
+            total_time = VideoUtils.format_time(
+                int(self.app.vlc_player.duration))
             self.slider_label.config(text=f"{time_str} / {total_time}")
 
     def _save_widget_references(self):
