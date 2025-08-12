@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import os
 import cv2
-from utils.utils import VideoUtils
+from utils.utils import show_custom_messagebox, VideoUtils
 from utils.event_system import event_system, Events
 
 
@@ -94,7 +94,6 @@ class NewTabCommandHandler:
                               segments=segments, extract_type='video')
         else:
             # 사용자에게 알림
-            from utils.utils import show_custom_messagebox
             if self.new_tab:
                 show_custom_messagebox(
                     self.new_tab.frame, "경고", "추출할 구간이 없습니다.\n먼저 구간을 저장해주세요.", "warning")
@@ -105,9 +104,19 @@ class NewTabCommandHandler:
         if segments:
             event_system.emit(Events.IMAGE_EXTRACTION_START, segments=segments)
 
+    def on_extract_audio(self):
+        """오디오 추출 시작"""
+        segments = self.app.get_saved_segments()
+        if segments:
+            event_system.emit(Events.AUDIO_EXTRACTION_START, segments=segments)
+        else:
+            if self.new_tab:
+                show_custom_messagebox(
+                    self.new_tab.frame, "경고", "추출할 구간이 없습니다.\n먼저 구간을 저장해주세요.", "warning")
+
     def on_cancel_extraction(self):
         """추출 취소"""
-        event_system.emit(Events.EXTRACTION_CANCEL)
+        event_system.emit(Events.EXTRACTION_CANCEL_REQUEST)
 
 
 class SegmentTableCommandHandler:

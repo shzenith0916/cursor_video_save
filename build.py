@@ -246,7 +246,6 @@ a = Analysis(
         'utils.segment_data_helper',
         'utils.video_playback_helper',
         'extract.extractor',
-        'extract.ffmpeg_utils',
     ],
     hookspath=[],
     hooksconfig={{}},

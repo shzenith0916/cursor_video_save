@@ -19,14 +19,14 @@ from utils.event_system import event_system, Events
 class PreviewWindow:
     """미리보기 창 UI 컨트롤러 """
 
-    def __init__(self, root, app, video_path, start_time, end_time, auto_play=True):
+    def __init__(self, root, app, video_path, start_time, end_time):
 
         self.root = root
         self.app = app  # app.py의 앱 참조
         self.video_path = video_path
         self.start_time = start_time
         self.end_time = end_time
-        self.auto_play = auto_play  # 자동 재생여부
+        # 자동재생 기능 제거됨
 
         # 초기화 메서드들 순서대로 호출
         self._init_window()
@@ -34,11 +34,6 @@ class PreviewWindow:
         self._init_video_controller()
         self._init_ui()
         self._init_event_handlers()
-
-        # 자동 재생 설정
-        if self.auto_play:
-            # 500ms 이후 자동 재생
-            self.window.after(500, self.start_auto_play)
 
     # =================================================================
     # 초기화 및 설정 메서드들
@@ -292,11 +287,6 @@ class PreviewWindow:
         self.vlc_player.pause()
         print("PreviewWindow: VLC 플레이어 정지")
 
-    def start_auto_play(self):
-        """자동 재생 시작"""
-        if self.auto_play and not self.is_playing:
-            self._handle_toggle_play()
-
     # =================================================================
     #  데이터 처리 메서드들
     # =================================================================
@@ -374,17 +364,35 @@ class PreviewWindow:
         self.window.lift()
 
     def _handle_close(self):
-        """창 닫기 이벤트. app.py에서 참조하는 메서드 - VLC 기반"""
-        self.is_playing = False  # 모니터링 루프 종료 신호
+        """창 닫기 이벤트 핸들러 - app.py에서 참조하는 메서드로 VLC 기반"""
+        print("PreviewWindow: 창 닫기 시작...")
 
-        # VLC 플레이어 정리
+        # # VLC 플레이어 정리 -> 기존의 코드를 이벤트 구독 해제 이후로 배치
+        # if self.vlc_player:
+        #     self.vlc_player.cleanup()  # cleanup()이 내부적으로 stop()도 호출함
+        #     print("PreviewWindow: VLC 플레이어 리소스 정리 완료")
+
+        # 1. 재생 중지 및 'after' 콜백 중지
+        self._pause_playback()  # is_playing을 False로 설정
+
+        # 2. 이벤트 구독 해제
+        try:
+            event_system.unsubscribe(
+                Events.VIDEO_PLAY_TOGGLE, self._on_play_toggle)
+            event_system.unsubscribe(
+                Events.SEGMENT_SAVED, self._on_segment_saved)
+            print("PreviewWindow: 이벤트 구독 해제 완료.")
+        except Exception as e:
+            print(f"PreviewWindow: 이벤트 구독 해제 중 오류: {e}")
+
+        # 3. VLC 플레이어 리소스 정리
         if self.vlc_player:
-            self.vlc_player.cleanup()  # cleanup()이 내부적으로 stop()도 호출함
-            print("PreviewWindow: VLC 플레이어 리소스 정리 완료")
+            self.vlc_player.cleanup()
+            self.vlc_player = None
+            print("PreviewWindow: VLC 플레이어 리소스 정리 완료.")
 
-        # 이벤트 구독 해제
-        event_system.unsubscribe(
-            Events.VIDEO_PLAY_TOGGLE, self._on_play_toggle)
-        event_system.unsubscribe(
-            Events.SEGMENT_SAVED, self._on_segment_saved)
-        self.window.destroy()
+        # 4. 창 파괴
+        if self.window:
+            self.window.destroy()
+            self.window = None
+            print("PreviewWindow: 창 파괴 완료.")

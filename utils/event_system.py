@@ -64,7 +64,8 @@ class Events:
     EXTRACTION_PROGRESS = "extraction_progress"  # 추출 진행 상태
     EXTRACTION_COMPLETE = "extraction_complete"  # 추출 완료
     EXTRACTION_ERROR = "extraction_error"  # 추출 오류
-    EXTRACTION_CANCEL = "extraction_cancel"  # 추출 취소
+    EXTRACTION_CANCEL = "extraction_cancel"  # 추출 취소 (매니저 방송)
+    EXTRACTION_CANCEL_REQUEST = "extraction_cancel_request"  # 추출 취소 요청 (UI 버튼)
 
     # 이미지 추출 관련 이벤트
     IMAGE_EXTRACTION_START = "image_extraction_start"  # 이미지 추출 시작
