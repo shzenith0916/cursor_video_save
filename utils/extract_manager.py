@@ -7,9 +7,9 @@ from tkinter import filedialog, messagebox
 from utils.utils import VideoUtils, show_custom_messagebox
 from utils.image_utils import ImageUtils
 from utils.event_system import event_system, Events
-from extract.video_extractor import VideoExtractor, ExtractConfig
-from extract.image_extractor import ImageExtractor
-from extract.audio_extractor import AudioExtractor
+from utils.extract.video_extractor import VideoExtractor, ExtractConfig
+from utils.extract.image_extractor import ImageExtractor
+from utils.extract.audio_extractor import AudioExtractor
 
 
 class ExtractionManager:
@@ -311,6 +311,7 @@ class ExtractionManager:
         self.cancel_event.clear()
 
         print(f"이미지 추출 시작: {segment_info['start']}~{segment_info['end']}초")
+        print(f"이미지 저장 폴더: {output_folder}")
 
         # 진행률 이벤트 발생
         event_system.emit(
@@ -333,6 +334,7 @@ class ExtractionManager:
         self.cancel_event.clear()
 
         print(f"오디오 추출 시작: {segment_info['start']}~{segment_info['end']}초")
+        print(f"오디오 저장 폴더: {output_folder}")
 
         # 진행률 이벤트 발생
         event_system.emit(
@@ -375,7 +377,7 @@ class ExtractionManager:
 
         except Exception as e:
             self.parent_frame.after(
-                0, lambda: self._emit_extraction_error(str(e)))
+                0, lambda err=e: self._emit_extraction_error(str(err)))
 
     def _do_image_extraction(self, input_path, output_folder, segment_info):
         """실제 이미지 추출 작업 (백그라운드)"""
@@ -395,13 +397,40 @@ class ExtractionManager:
                 cancel_event=self.cancel_event
             )
 
+            # OpenCV가 실패하거나 0개 추출 시 FFmpeg 폴백 시도
+            if (not result) or (result.get('extracted_count', 0) == 0):
+                print("OpenCV 이미지 추출 결과가 0개입니다. FFmpeg 폴백을 시도합니다.")
+                ffmpeg_exec = (self.ffmpeg_manager.ffmpeg_path
+                               if self.ffmpeg_manager and self.ffmpeg_manager.ffmpeg_path else 'ffmpeg')
+                ff_result = ImageExtractor.extract_frames_with_ffmpeg(
+                    input_path=input_path,
+                    output_folder=output_folder,
+                    start_time=segment_info['start'],
+                    end_time=segment_info['end'],
+                    ffmpeg_executable=ffmpeg_exec
+                )
+                if ff_result.get('success') and ff_result.get('extracted_count', 0) > 0:
+                    # 폴백 성공 시 결과 변환하여 동일 경로로 전달
+                    result = {
+                        'extracted_count': ff_result.get('extracted_count', 0),
+                        'total_frames': ff_result.get('extracted_count', 0),
+                        'fps': 0,
+                        'frame_skip': 0
+                    }
+                else:
+                    # 폴백 실패 시 에러 이벤트
+                    self.parent_frame.after(0, lambda: self._emit_extraction_error(
+                        ff_result.get('message', 'FFmpeg 폴백 실패')))
+                    return
+
             # 결과 이벤트 발생
             self.parent_frame.after(
                 0, lambda: self._emit_image_extraction_complete(result, output_folder))
 
         except Exception as e:
             self.parent_frame.after(
-                0, lambda: self._emit_extraction_error(str(e)))
+                0, lambda err=e: self._emit_extraction_error(str(err)))
+            # 에러 부분 수정. e로 그대로 넣으면 안되고 err로 한번 더 감싸서 처리
 
     def _do_audio_extraction(self, input_path, output_folder, segment_info):
         """실제 오디오 추출 작업 (백그라운드)"""
@@ -436,7 +465,7 @@ class ExtractionManager:
 
         except Exception as e:
             self.parent_frame.after(
-                0, lambda: self._emit_extraction_error(str(e)))
+                0, lambda err=e: self._emit_extraction_error(str(err)))
 
     def _video_progress_callback(self, message):
         """비디오 추출 진행률 콜백"""
@@ -444,7 +473,7 @@ class ExtractionManager:
             self.parent_frame.after(0, lambda: event_system.emit(
                 Events.EXTRACTION_PROGRESS,
                 progress=50,
-                status=f"🎬 {message}",
+                status=f"비디오 추출 중... {message}",
                 icon="⚙️"
             ))
 
@@ -454,19 +483,35 @@ class ExtractionManager:
             self.parent_frame.after(0, lambda: event_system.emit(
                 Events.IMAGE_EXTRACTION_PROGRESS,
                 progress=progress,
-                status=f"이미지 {extracted_count}/{total_frames} 저장 중...",
-                icon="💾"
+                status=f"이미지 {extracted_count}/{total_frames} 저장 중..."
             ))
 
-    def _audio_progress_callback(self, progress, extracted_count, total_frames):
-        """오디오 추출 진행률 콜백"""
-        if not self.cancel_event.is_set():
-            self.parent_frame.after(0, lambda: event_system.emit(
-                Events.AUDIO_EXTRACTION_PROGRESS,
-                progress=progress,
-                status=f"오디오 처리 중... {progress:.1f}%",
-                icon="🎵"
-            ))
+    def _audio_progress_callback(self, *args, **kwargs):
+        """오디오 추출 진행률 콜백 (메시지/퍼센트 모두 대응)"""
+        if self.cancel_event.is_set():
+            return
+        # 기본값
+        progress = kwargs.get('progress')
+        status_text = kwargs.get('status', None)
+        if progress is None:
+            if args:
+                first = args[0]
+                if isinstance(first, (int, float)):
+                    progress = float(first)
+                    status_text = status_text or f"오디오 처리 중... {progress:.1f}%"
+                else:
+                    # 문자열 메시지 등
+                    status_text = status_text or str(first)
+                    progress = 50
+            else:
+                progress = 50
+        if not status_text:
+            status_text = f"오디오 처리 중... {progress:.1f}%"
+        self.parent_frame.after(0, lambda: event_system.emit(
+            Events.AUDIO_EXTRACTION_PROGRESS,
+            progress=progress,
+            status=status_text
+        ))
 
     def _emit_video_extraction_complete(self, result):
         """비디오 추출 완료 이벤트 발생"""
@@ -478,9 +523,30 @@ class ExtractionManager:
             message=result['message'],
             output_path=result.get('output_path', ''),
             progress=100,
-            status="비디오 추출 완료!",
-            icon="✅"
+            status="비디오 추출 완료!"
         )
+
+        # 사용자 알림 (완료 메시지)
+        try:
+            success = result.get('success', False)
+            output_path = result.get('output_path', '')
+            message = result.get('message', '')
+            if success and output_path:
+                self.parent_frame.after(0, lambda: show_custom_messagebox(
+                    self.parent_frame,
+                    "비디오 추출 완료",
+                    f"저장 위치:\n{output_path}",
+                    "success"
+                ))
+            elif not success:
+                self.parent_frame.after(0, lambda: show_custom_messagebox(
+                    self.parent_frame,
+                    "비디오 추출 실패",
+                    message or "알 수 없는 오류",
+                    "error"
+                ))
+        except Exception:
+            pass
 
     def _emit_image_extraction_complete(self, result, output_folder):
         """이미지 추출 완료 이벤트 발생"""
@@ -494,8 +560,7 @@ class ExtractionManager:
             fps=result['fps'],
             frame_skip=result['frame_skip'],
             progress=100,
-            status=f"{result['extracted_count']}개 이미지 추출 완료!",
-            icon="✅"
+            status=f"{result['extracted_count']}개 이미지 추출 완료!"
         )
 
         # 사용자 알림 (완료 메시지)
@@ -524,14 +589,39 @@ class ExtractionManager:
         """오디오 추출 완료 이벤트 발생"""
         self._is_audio_extracting = False
 
+        # 결과 확인 및 경고
+        out_path = result.get('output_path') if isinstance(
+            result, dict) else None
+        if not out_path or not os.path.exists(out_path):
+            print("⚠️ 오디오 추출 결과 파일이 확인되지 않습니다.")
+            event_system.emit(
+                Events.AUDIO_EXTRACTION_ERROR,
+                error=result.get('message', '오디오 파일 생성 실패'),
+                progress=0,
+                status="오디오 파일 생성 실패",
+                icon="⚠️"
+            )
+            return
+
         event_system.emit(
             Events.AUDIO_EXTRACTION_COMPLETE,
             extracted_count=result.get('extracted_count', 1),
-            output_folder=output_folder,
+            output_folder=os.path.dirname(
+                out_path) if out_path else output_folder,
             progress=100,
-            status="오디오 추출 완료!",
-            icon="✅"
+            status="오디오 추출 완료!"
         )
+
+        # 사용자 알림 (완료 메시지)
+        try:
+            self.parent_frame.after(0, lambda: show_custom_messagebox(
+                self.parent_frame,
+                "오디오 추출 완료",
+                f"저장 위치:\n{out_path}",
+                "success"
+            ))
+        except Exception:
+            pass
 
     def _emit_extraction_error(self, error_message):
         """추출 오류 이벤트 발생"""
@@ -619,13 +709,13 @@ class ExtractionManager:
 
         if result['success']:
             self.update_progress(100, "추출 완료!", "✅")
-            show_custom_messagebox(
-                self.frame, "비디오 추출 완료", "추출 성공!", "success")
+            messagebox.showinfo(
+                "비디오 추출 완료", "추출 성공!", parent=self.frame)
 
         else:
             self.update_progress(0, " 추출 실패", "❌")
             show_custom_messagebox(
-                self.frame, "실패", f"추출 실패: {result['message']}", "error")
+                self.frame, "비디오 추출 실패", f"추출 실패: {result['message']}", "error")
 
         # 5초 후 진행률 바 초기화
         self.frame.after(5000, lambda: self.update_progress(0, "대기 중...", "⚡"))

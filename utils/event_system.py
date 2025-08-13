@@ -27,7 +27,11 @@ class EventSystem:
                 try:
                     callback(**kwargs)
                 except Exception as e:
-                    print(f"이벤트 콜백 실행 중 오류: {e}")
+                    try:
+                        import traceback
+                        traceback.print_exc()
+                    finally:
+                        print(f"이벤트 콜백 실행 중 오류: {e}")
 
     def clear(self) -> None:
         """모든 이벤트 리스너 제거"""

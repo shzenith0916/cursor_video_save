@@ -11,7 +11,7 @@ from .segment_table import SegmentTable
 from utils.ui_utils import UiUtils
 from utils.utils import VideoUtils, show_custom_messagebox
 from utils.image_utils import ImageUtils
-from extract.video_extractor import VideoExtractor, ExtractConfig
+from utils.extract.video_extractor import VideoExtractor, ExtractConfig
 from .command_handlers import NewTabCommandHandler
 from utils.event_system import event_system, Events
 from utils.extract_manager import ExtractionManager
@@ -532,25 +532,42 @@ class NewTab(BaseTab):
         except Exception as e:
             print(f"추출 취소 이벤트 처리 오류: {e}")
 
-    def update_progress(self, value=0, status="", icon="⚡", **kwargs):  # 프론트엔드 작업
-        """진행률 업데이트"""
+    def update_progress(self, *args, value=0, status="", icon="⚡", **kwargs):  # 프론트엔드 작업
+        """진행률 업데이트 (positional/kwargs 모두 대응)"""
         try:
-            # 키워드 인수로 progress가 전달된 경우 value로 사용
-            if 'progress' in kwargs:
+            # positional 인자 처리: (value), (value, status), (value, status, icon)
+            if args:
+                if len(args) >= 1:
+                    value = args[0]
+                if len(args) >= 2:
+                    status = args[1]
+                if len(args) >= 3:
+                    icon = args[2]
+
+            # 키워드 인수로 progress가 전달된 경우 value 우선 적용
+            if 'progress' in kwargs and kwargs['progress'] is not None:
                 value = kwargs['progress']
 
             if value is not None:
-                self.progress_bar['value'] = value
-                self.progress_percentage.config(text=f"{int(value)}%")
+                try:
+                    self.progress_bar['value'] = float(value)
+                    self.progress_percentage.config(
+                        text=f"{int(float(value))}%")
+                except Exception:
+                    pass
 
             # 상태 메시지 업데이트
+            status_kw = kwargs.get('status')
+            if status_kw is not None:
+                status = status_kw
+
             if status:
                 self.progress_status.config(text=f"ⓘ {status}")
             elif value == 0:
                 self.progress_status.config(text="ⓘ 작업 대기 중입니다.")
             elif value < 100:
                 self.progress_status.config(
-                    text=f"ⓘ 작업 진행 중... ({int(value)}%)")
+                    text=f"ⓘ 작업 진행 중... ({int(float(value))}%)")
             elif value == 100:
                 self.progress_status.config(text="ⓘ 작업이 완료되었습니다!")
 

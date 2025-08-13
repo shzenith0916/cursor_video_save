@@ -1,9 +1,9 @@
 import os
 import subprocess
 from utils.utils import VideoUtils
-
-
+# 상대경로  from ..image_utils import ImageUtils
 # 앱이 ffmpeg 절대경로를 쓰도록 유지하기 위해, ffmpeg_executable='ffmpeg' 로 수정.
+
 
 class VideoExtractor:
     """비디오 구간 추출을 담당하는 클래스 (항상 재인코딩)"""

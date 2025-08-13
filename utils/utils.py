@@ -18,7 +18,7 @@ def show_custom_messagebox(parent, title, message, msg_type="info", auto_close_m
 
     # DPI 스케일링 적용 및 중앙 정렬
     width = int(380 * UiUtils.get_scaling_factor_by_dpi(parent))
-    height = int(160 * UiUtils.get_scaling_factor_by_dpi(parent))
+    height = int(200 * UiUtils.get_scaling_factor_by_dpi(parent))
     UiUtils.center_window(dialog, parent, width, height)
 
     dialog.resizable(False, False)
@@ -242,7 +242,7 @@ class VideoUtils:
                                  progress_callback=None, cancel_event=None,
                                  audio_format='mp3', audio_quality='192k'):
         """비디오에서 오디오 추출 (공통 메서드)"""
-        from extract.audio_extractor import AudioExtractor as VideoExtractor
+        from utils.extract.audio_extractor import AudioExtractor as VideoExtractor
 
         try:
             # 오디오 파일명 생성
