@@ -3,7 +3,7 @@ from .vlc_utils import VLCPlayer
 from .styles import AppStyles
 from .event_system import event_system, Events
 from .ui_utils import UiUtils
-from .image_utils import ImageUtils
+from .extract.image_extractor import ImageUtils
 
 
 __all__ = [

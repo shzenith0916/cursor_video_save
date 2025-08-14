@@ -3,8 +3,8 @@ from datetime import datetime
 import cv2
 import subprocess
 from utils.utils import VideoUtils
-from tkinter import filedialog
 import tkinter as tk
+from utils.event_system import event_system, Events
 
 
 class ImageExtractor:
@@ -23,7 +23,7 @@ class ImageExtractor:
             progress_callback: 진행률 콜백(progress, extracted_count, total_frames)
             cancel_event: 취소 이벤트
         Returns:
-            dict: {'extracted_count', 'total_frames', 'fps', 'frame_skip'}
+            dict: {'extracted_count', 'total_frames', 'fps'}
         """
 
         print(
@@ -44,10 +44,7 @@ class ImageExtractor:
             start_frame = int(start_time * fps)
             end_frame = int(end_time * fps)
 
-            output_folder = ImageUtils.create_output_folder_with_dialog(
-                input_path, start_time, end_time)
-
-            base_filename = ImageUtils._basename_of_videofile(input_path)
+            base_filename = ImageUtils.basename_of_videofile(input_path)
 
             print(f"[ImageExtractor] 출력 폴더: {output_folder}")
 
@@ -55,12 +52,26 @@ class ImageExtractor:
             # 시작 프레임 이동
             cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
+            # frame_count 는 아래 추출 while문을 돌기 위한 카운터
             frame_count = start_frame
+            # extracted_count 는 추출된 프레임 개수로 진행률 계산을 위한 카운터터
             extracted_count = 0
+
+            # 저장할 프레임 이미지 총 개수(진행률 계산용)
+            try:
+                if end_frame >= start_frame:
+                    # 예시: 10초이며 fps가 30일때, (300-0) // 1 + 1 = 300개
+                    total_exports = (
+                        (end_frame - start_frame) // max(frame_skip, 1) + 1)
+                else:
+                    total_exports = 0
+            except Exception:
+                total_exports = 0
 
             # 추출 진행
             while frame_count <= end_frame:
-                # 프레임 읽기
+
+                # 프레임 읽기 (순차적 디코딩)
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -71,10 +82,29 @@ class ImageExtractor:
                         base_filename, frame_count)
                     filepath = os.path.join(output_folder, filename)
 
-                    # 파일저장
-                    cv2.imwrite(filepath, frame)
+                    # 파일저장 (유니코드 경로 안전)
+                    try:
+                        ok, buf = cv2.imencode('.jpg', frame)
+                        if ok:
+                            buf.tofile(filepath)
+                        else:
+                            raise IOError('imencode 실패')
+                    except Exception as e:
+                        print(f"저장 실패: {filepath} - {e}")
+                        frame_count += 1
+                        continue
                     print(f"저장됨: {filepath}")
                     extracted_count += 1
+
+                    # 진행률 콜백
+                    try:
+                        progress = (extracted_count /
+                                    max(1, total_exports)) * 100.0
+                        if progress_callback:
+                            progress_callback(
+                                progress, extracted_count, total_exports)
+                    except Exception:
+                        pass
 
                 frame_count += 1
 
@@ -82,9 +112,8 @@ class ImageExtractor:
                 f"[ImageExtractor] done: saved={extracted_count}/{total_frames}, fps={fps}")
             return {
                 'extracted_count': extracted_count,
-                'total_frames': total_frames,
-                'fps': fps
-            }
+                'total_frames': total_frames}
+
         finally:
             cap.release()
 
@@ -134,7 +163,7 @@ class ImageUtils:
         """이미지 추출용 출력 폴더명 생성"""
 
         # 비디오 파일명 추출
-        video_filename = ImageUtils._basename_of_videofile(input_path)
+        video_filename = ImageUtils.basename_of_videofile(input_path)
         start_time_str = VideoUtils.format_time(start_time).replace(':', '-')
         end_time_str = VideoUtils.format_time(end_time).replace(':', '-')
 
@@ -150,32 +179,6 @@ class ImageUtils:
         timestamp = datetime.now().strftime("%y%m%d")
         return f"{base_filename}_{timestamp}_frame{frame_number:06d}.jpg"
 
-    @staticmethod
-    def _create_output_folder_with_dialog(input_path, start_time, end_time):
-        """폴더 선택 다이얼로그로 출력 폴더 생성"""
-        # 폴더명 생성
-        folder_name = ImageUtils.generate_output_folder_name(
-            input_path, start_time, end_time)
-
-        # 사용자에게 상위 폴더 선택하게 함
-        root = tk.Tk()
-        root.withdraw()  # 메인 윈도우 숨기기
-
-        base_dir = filedialog.askdirectory(
-            title=f"'{folder_name}' 폴더를 생성할 위치를 선택하세요"
-        )
-        root.destroy()
-
-        if not base_dir:  # 사용자가 취소한 경우
-            raise ValueError("폴더 선택이 취소되었습니다.")
-
-        # 전체 폴더 경로 생성
-        full_folder_path = os.path.join(base_dir, folder_name)
-        os.makedirs(full_folder_path, exist_ok=True)
-
-        print(f"[ImageUtils] 출력 폴더 생성됨: {full_folder_path}")
-        return full_folder_path
-
     # ----------------- FFmpeg 폴백 -----------------
 
     @staticmethod
@@ -187,9 +190,24 @@ class ImageUtils:
         Returns dict: {'success', 'extracted_count', 'message'}
         """
         try:
-            if base_filename is None or timestamp is None:
-                base_filename, timestamp = ImageExtractor._build_naming(
-                    input_path)  # 파일명, 타임스탬프 두개 반환
+            # 이벤트: FFmpeg 기반 이미지 추출 시작
+            try:
+                event_system.emit(
+                    Events.IMAGE_EXTRACTION_START,
+                    input_path=input_path,
+                    output_folder=output_folder,
+                    start_time=start_time,
+                    end_time=end_time,
+                    method='ffmpeg'
+                )
+            except Exception:
+                pass
+
+            if base_filename is None:
+                base_filename = os.path.splitext(
+                    os.path.basename(input_path))[0].strip()
+            if timestamp is None:
+                timestamp = datetime.now().strftime("%y%m%d")
 
             output_pattern = os.path.join(
                 output_folder, f"{base_filename}_{timestamp}_frame%06d.jpg")
@@ -219,6 +237,11 @@ class ImageUtils:
             if result.returncode != 0:
                 msg = result.stderr or result.stdout or 'ffmpeg 실패'
                 print(f"[ImageExtractor] FFmpeg images failed: {msg[:500]}")
+                try:
+                    event_system.emit(
+                        Events.IMAGE_EXTRACTION_ERROR, message=msg)
+                except Exception:
+                    pass
                 return {'success': False, 'extracted_count': 0, 'message': msg}
 
             # 생성 파일 개수 추정: 디렉터리 스캔
@@ -231,7 +254,22 @@ class ImageUtils:
                 pass
 
             print(f"[ImageExtractor] FFmpeg images success: count={count}")
+            try:
+                event_system.emit(
+                    Events.IMAGE_EXTRACTION_COMPLETE,
+                    extracted_count=count,
+                    total_frames=count,
+                    output_folder=output_folder,
+                    method='ffmpeg'
+                )
+            except Exception:
+                pass
             return {'success': True, 'extracted_count': count, 'message': 'ffmpeg 이미지 추출 성공'}
         except Exception as e:
             print(f"[ImageExtractor] FFmpeg images exception: {e}")
+            try:
+                event_system.emit(
+                    Events.IMAGE_EXTRACTION_ERROR, message=str(e))
+            except Exception:
+                pass
             return {'success': False, 'extracted_count': 0, 'message': str(e)}

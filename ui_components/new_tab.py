@@ -10,7 +10,7 @@ from .base_tab import BaseTab
 from .segment_table import SegmentTable
 from utils.ui_utils import UiUtils
 from utils.utils import VideoUtils, show_custom_messagebox
-from utils.image_utils import ImageUtils
+from utils.extract.image_extractor import ImageUtils
 from utils.extract.video_extractor import VideoExtractor, ExtractConfig
 from .command_handlers import NewTabCommandHandler
 from utils.event_system import event_system, Events

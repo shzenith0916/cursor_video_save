@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime
 from tkinter import filedialog, messagebox
 from utils.utils import VideoUtils, show_custom_messagebox
-from utils.image_utils import ImageUtils
+from utils.extract.image_extractor import ImageUtils
 from utils.event_system import event_system, Events
 from utils.extract.video_extractor import VideoExtractor, ExtractConfig
 from utils.extract.image_extractor import ImageExtractor
@@ -473,9 +473,7 @@ class ExtractionManager:
             self.parent_frame.after(0, lambda: event_system.emit(
                 Events.EXTRACTION_PROGRESS,
                 progress=50,
-                status=f"비디오 추출 중... {message}",
-                icon="⚙️"
-            ))
+                status=f"비디오 추출 중... {message}"))
 
     def _image_progress_callback(self, progress, extracted_count, total_frames):
         """이미지 추출 진행률 콜백"""
@@ -557,8 +555,6 @@ class ExtractionManager:
             extracted_count=result['extracted_count'],
             total_extract_frames=result['total_frames'],
             output_folder=output_folder,
-            fps=result['fps'],
-            frame_skip=result['frame_skip'],
             progress=100,
             status=f"{result['extracted_count']}개 이미지 추출 완료!"
         )
@@ -598,9 +594,7 @@ class ExtractionManager:
                 Events.AUDIO_EXTRACTION_ERROR,
                 error=result.get('message', '오디오 파일 생성 실패'),
                 progress=0,
-                status="오디오 파일 생성 실패",
-                icon="⚠️"
-            )
+                status="오디오 파일 생성 실패")
             return
 
         event_system.emit(
@@ -646,9 +640,7 @@ class ExtractionManager:
         event_system.emit(
             Events.EXTRACTION_CANCEL,
             progress=0,
-            status="취소됨",
-            icon="❌"
-        )
+            status="취소됨", \)
 
     @staticmethod
     def open_file_location(file_path):
