@@ -43,7 +43,8 @@ def check_dependencies():
         'numpy': 'numpy',
         'Pillow': 'PIL',
         'ttkbootstrap': 'ttkbootstrap',
-        'pygame': 'pygame',
+        'python-vlc': 'vlc',
+        # 'pygame': 'pygame',
         'requests': 'requests'
     }
 
@@ -90,12 +91,94 @@ Name: "quicklaunchicon"; Description: "빠른 실행 바로가기 생성"; Group
 [Files]
 Source: "{build_folder}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "EULA.txt"; DestDir: "{{app}}"
+Source: "INSTALL.md"; DestDir: "{{app}}"; Flags: ignoreversion
 
 [Icons]
 Name: "{{group}}\\VideoPlayer"; Filename: "{{app}}\\비디오플레이어.exe"
+Name: "{{group}}\\설치 가이드"; Filename: "{{app}}\\INSTALL.md"
 Name: "{{group}}\\{{cm:UninstallProgram,VideoPlayer}}"; Filename: "{{uninstallexe}}"
 Name: "{{autodesktop}}\\VideoPlayer"; Filename: "{{app}}\\비디오플레이어.exe"; Tasks: desktopicon
 Name: "{{userappdata}}\\Microsoft\\Internet Explorer\\Quick Launch\\VideoPlayer"; Filename: "{{app}}\\비디오플레이어.exe"; Tasks: quicklaunchicon
+
+[Code]
+function CheckFFmpegInstallation: Boolean;
+var
+  FFmpegPath: String;
+  PathEnv: String;
+  PathList: TStringList;
+  I: Integer;
+begin
+  Result := False;
+  
+  // PATH 환경변수에서 FFmpeg 확인
+  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', 'Path', PathEnv) then
+  begin
+    PathList := TStringList.Create;
+    try
+      PathList.Delimiter := ';';
+      PathList.DelimitedText := PathEnv;
+      
+      for I := 0 to PathList.Count - 1 do
+      begin
+        FFmpegPath := PathList[I] + '\\ffmpeg.exe';
+        if FileExists(FFmpegPath) then
+        begin
+          Result := True;
+          Break;
+        end;
+      end;
+    finally
+      PathList.Free;
+    end;
+  end;
+  
+  // 일반적인 설치 경로들도 확인
+  if not Result then
+  begin
+    Result := FileExists('C:\\ffmpeg\\bin\\ffmpeg.exe') or
+              FileExists(ExpandConstant('{{pf}}\\ffmpeg\\bin\\ffmpeg.exe')) or
+              FileExists(ExpandConstant('{{pf32}}\\ffmpeg\\bin\\ffmpeg.exe'));
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+  FFmpegInstalled: Boolean;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    FFmpegInstalled := CheckFFmpegInstallation;
+    
+    if not FFmpegInstalled then
+    begin
+      if MsgBox('비디오플레이어 설치 완료!' + #13#10#13#10 +
+                '✅ VLC 미디어 라이브러리가 내장되어 비디오 재생이 바로 가능합니다.' + #13#10#13#10 +
+                '⚠️  추가 기능을 위해 FFmpeg 설치를 권장합니다:' + #13#10 +
+                '   • 비디오 구간 추출' + #13#10 +
+                '   • 오디오 추출' + #13#10 +
+                '   • 이미지 프레임 추출' + #13#10#13#10 +
+                '지금 FFmpeg 다운로드 페이지를 열까요?', 
+                mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        ShellExec('open', 'https://ffmpeg.org/download.html', '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
+      end;
+      
+      MsgBox('설치 완료! 🎉' + #13#10#13#10 + 
+             '✅ 비디오 재생: 즉시 사용 가능' + #13#10 +
+             '⏳ 추출 기능: FFmpeg 설치 후 사용 가능' + #13#10#13#10 +
+             '자세한 설치 가이드는 시작 메뉴 > VideoPlayer > 설치 가이드를 참고하세요.', 
+             mbInformation, MB_OK);
+    end else
+    begin
+      MsgBox('🎉 설치 완료!' + #13#10#13#10 + 
+             '✅ VLC 미디어 라이브러리: 내장됨' + #13#10 +
+             '✅ FFmpeg: 설치됨' + #13#10#13#10 +
+             '모든 기능을 바로 사용할 수 있습니다!', 
+             mbInformation, MB_OK);
+    end;
+  end;
+end;
 
 [Run]
 Filename: "{{app}}\\비디오플레이어.exe"; Description: "프로그램 실행"; Flags: nowait postinstall skipifsilent
@@ -182,6 +265,10 @@ def compile_inno_setup():
 def create_spec_file():
     """PyInstaller spec 파일을 생성합니다."""
 
+    # VLC 번들러 초기화
+    from utils.vlc_bundler import VLCBundler
+    VLCBundler.print_bundle_info()
+
     # ttkbootstrap 테마 경로 동적 찾기
     try:
         import ttkbootstrap
@@ -190,14 +277,14 @@ def create_spec_file():
         themes_path = os.path.join(ttkbootstrap_path, 'themes')
 
         if os.path.exists(themes_path):
-            datas_section = f"(r'{themes_path}', 'ttkbootstrap/themes'),\n ('EULA.txt', '.'),"
+            datas_section = f"(r'{themes_path}', 'ttkbootstrap/themes'),\n        ('EULA.txt', '.'),\n        ('INSTALL.md', '.'),"
             print(f"✓ ttkbootstrap 테마 경로 찾음: {themes_path}")
         else:
-            # 테마 경로를 찾을 수 없으면 EULA.txt 파일만 추가
-            datas_section = "('EULA.txt', '.'),"
+            # 테마 경로를 찾을 수 없으면 기본 파일들만 추가
+            datas_section = "('EULA.txt', '.'),\n        ('INSTALL.md', '.'),"
             print("⚠️  ttkbootstrap 테마 경로를 찾을 수 없음")
     except ImportError:
-        datas_section = ""
+        datas_section = "('EULA.txt', '.'),\n        ('INSTALL.md', '.'),"
         print("⚠️  ttkbootstrap 모듈을 찾을 수 없음")
 
     # 아이콘 파일 경로 확인
@@ -211,6 +298,22 @@ def create_spec_file():
     # 아이콘 설정 생성
     icon_setting = f'r"{icon_path}"' if icon_path else 'None'
 
+    # VLC 바이너리와 데이터 가져오기
+    vlc_binaries = VLCBundler.get_vlc_binaries()
+    vlc_data = VLCBundler.get_vlc_data()
+
+    # 바이너리 섹션 생성
+    binaries_section = ""
+    if vlc_binaries:
+        binaries_list = [f"(r'{src}', r'{dst}')" for src, dst in vlc_binaries]
+        binaries_section = ",\n        ".join(binaries_list) + ","
+
+    # VLC 데이터를 datas_section에 추가
+    if vlc_data:
+        vlc_data_list = [f"(r'{src}', r'{dst}')" for src, dst in vlc_data]
+        vlc_data_section = ",\n        " + ",\n        ".join(vlc_data_list)
+        datas_section += vlc_data_section
+
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
 
 block_cipher = None
@@ -218,15 +321,18 @@ block_cipher = None
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=[
+        {binaries_section}
+    ],
     datas=[
         {datas_section}
     ],
     hiddenimports=[
         'ttkbootstrap.themes',
         'ttkbootstrap.themes.standard',
-        'pygame.mixer',
-        'pygame._view',
+        'vlc',
+        # 'pygame.mixer',
+        # 'pygame._view',
         'cv2',
         'numpy',
         'PIL._tkinter_finder',
@@ -243,9 +349,13 @@ a = Analysis(
         'utils.styles',
         'utils.ui_utils',
         'utils.event_system',
-        'utils.segment_data_helper',
-        'utils.video_playback_helper',
-        'extract.extractor',
+        'utils.extract_manager',
+        'utils.ffmpeg_manager',
+        'utils.vlc_utils',
+        'utils.extract.video_extractor',
+        'utils.extract.audio_extractor',
+        'utils.extract.image_extractor',
+        'utils.image_utils',
     ],
     hookspath=[],
     hooksconfig={{}},
@@ -288,9 +398,9 @@ exe = EXE(
 
     print("✓ video_player.spec 파일 생성됨")
     if icon_path:
-        print(f"✓ 아이콘 파일 포함: {icon_path}")
+        print(f"아이콘 파일 포함: {icon_path}")
     else:
-        print("ℹ️  아이콘 파일 없음")
+        print("ℹ️ 아이콘 파일 없음")
 
 
 def build_executable():
@@ -306,13 +416,15 @@ def build_executable():
         '--name', '비디오플레이어',
         '--add-data', 'ui_components;ui_components',
         '--add-data', 'utils;utils',
-        '--add-data', 'extract;extract',
         '--add-data', 'EULA.txt;.',
         '--add-data', 'app.py;.',
         '--hidden-import', 'ttkbootstrap.themes',
         '--hidden-import', 'ttkbootstrap.themes.standard',
-        '--hidden-import', 'pygame.mixer',
-        '--hidden-import', 'pygame._view',
+        '--hidden-import', 'vlc',
+        '--hidden-import', 'pythoncom',
+        '--hidden-import', 'pywintypes',
+        # '--hidden-import', 'pygame.mixer',
+        # '--hidden-import', 'pygame._view',
         '--hidden-import', 'cv2',
         '--hidden-import', 'numpy',
         '--hidden-import', 'PIL._tkinter_finder',

@@ -19,7 +19,7 @@
 - NumPy (BSD 3-Clause "New" or "Revised" License)
 - Pillow (PIL Software License)
 - ttkbootstrap (MIT License)
-- Pygame (GNU LGPL version 2.1)
+- python-vlc (GNU LGPL version 2.1)
 - PyInstaller (PyInstaller License)
 - Requests (Apache License 2.0)
 

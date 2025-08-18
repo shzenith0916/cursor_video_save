@@ -3,8 +3,7 @@ from datetime import datetime
 import cv2
 import subprocess
 from utils.utils import VideoUtils
-import tkinter as tk
-from utils.event_system import event_system, Events
+from utils.image_utils import ImageUtils
 
 
 class ImageExtractor:
@@ -141,44 +140,6 @@ class ImageExtractor:
         # 50fps 이상이면 매 2번째 프레임만, 그 외는 모든 프레임
         return 2 if fps >= max_fps else 1
 
-# --------------------------------------- 폴더, 파일명 관련
-
-
-class ImageUtils:
-    """이미지 관련 보조 계산 유틸리티 (상태 없음)"""
-
-    @staticmethod
-    def basename_of_videofile(input_path):
-        """비디오 파일명 추출 - 폴더명 생성에 사용"""
-
-        import re
-        # 비디오 파일명 추출(확장자 제거)
-        base_filename = os.path.splitext(os.path.basename(input_path))[0]
-        # 파일명에서 특수문자 제거 및 공백 제거 (특수문자 제거 정규식)
-        video_filename = re.sub(r'[^a-zA-Z0-9]', '', base_filename)
-        return video_filename
-
-    @staticmethod
-    def generate_output_folder_name(input_path, start_time, end_time):
-        """이미지 추출용 출력 폴더명 생성"""
-
-        # 비디오 파일명 추출
-        video_filename = ImageUtils.basename_of_videofile(input_path)
-        start_time_str = VideoUtils.format_time(start_time).replace(':', '-')
-        end_time_str = VideoUtils.format_time(end_time).replace(':', '-')
-
-        # 날짜 추가
-        today = datetime.now().strftime("%Y%m%d")
-
-        # 폴더명 생성: [비디오명]_[시작시간]_[종료시간]_[날짜]
-        return f"{video_filename}_{start_time_str}_{end_time_str}_{today}"
-
-    @staticmethod
-    def generate_image_filename(base_filename, frame_number):
-        """이미지 파일명 생성 (타임스탬프 포함)"""
-        timestamp = datetime.now().strftime("%y%m%d")
-        return f"{base_filename}_{timestamp}_frame{frame_number:06d}.jpg"
-
     # ----------------- FFmpeg 폴백 -----------------
 
     @staticmethod
@@ -190,19 +151,7 @@ class ImageUtils:
         Returns dict: {'success', 'extracted_count', 'message'}
         """
         try:
-            # 이벤트: FFmpeg 기반 이미지 추출 시작
-            try:
-                event_system.emit(
-                    Events.IMAGE_EXTRACTION_START,
-                    input_path=input_path,
-                    output_folder=output_folder,
-                    start_time=start_time,
-                    end_time=end_time,
-                    method='ffmpeg'
-                )
-            except Exception:
-                pass
-
+            # 파일명 생성
             if base_filename is None:
                 base_filename = os.path.splitext(
                     os.path.basename(input_path))[0].strip()
@@ -212,6 +161,7 @@ class ImageUtils:
             output_pattern = os.path.join(
                 output_folder, f"{base_filename}_{timestamp}_frame%06d.jpg")
 
+            # FFmpeg 커맨드 생성
             command = [
                 ffmpeg_executable, '-y',
                 '-ss', str(start_time),
@@ -219,12 +169,16 @@ class ImageUtils:
                 '-i', input_path,
                 '-qscale:v', str(quality)
             ]
+            # frame skip 대신 FPS 제한으로 opencv에서의 동일 효과 구현현
             if target_fps:
                 command += ['-vf', f'fps={target_fps}']
-            command.append(output_pattern)
+
+            command.append(output_pattern)  # FFmpeg 커맨드에서 마지막은 항상 출력 파일 경로.
 
             print("[ImageExtractor] Executing FFmpeg (images) command:",
                   ' '.join(command))
+
+            # FFmpeg 실행 (서브프로세스)
             result = subprocess.run(
                 command,
                 check=False,
@@ -234,42 +188,25 @@ class ImageUtils:
                 errors='ignore',
                 timeout=300
             )
+
+            # 성공/실패 여부 확인
             if result.returncode != 0:
                 msg = result.stderr or result.stdout or 'ffmpeg 실패'
                 print(f"[ImageExtractor] FFmpeg images failed: {msg[:500]}")
-                try:
-                    event_system.emit(
-                        Events.IMAGE_EXTRACTION_ERROR, message=msg)
-                except Exception:
-                    pass
                 return {'success': False, 'extracted_count': 0, 'message': msg}
 
-            # 생성 파일 개수 추정: 디렉터리 스캔
+            # 생성 파일 개수 추정: glob 패턴 사용으로 최적화
+            import glob
             count = 0
             try:
-                for name in os.listdir(output_folder):
-                    if name.startswith(f"{base_filename}_{timestamp}_frame") and name.endswith('.jpg'):
-                        count += 1
+                pattern = os.path.join(
+                    output_folder, f"{base_filename}_{timestamp}_frame*.jpg")
+                count = len(glob.glob(pattern))
             except Exception:
                 pass
 
             print(f"[ImageExtractor] FFmpeg images success: count={count}")
-            try:
-                event_system.emit(
-                    Events.IMAGE_EXTRACTION_COMPLETE,
-                    extracted_count=count,
-                    total_frames=count,
-                    output_folder=output_folder,
-                    method='ffmpeg'
-                )
-            except Exception:
-                pass
             return {'success': True, 'extracted_count': count, 'message': 'ffmpeg 이미지 추출 성공'}
         except Exception as e:
             print(f"[ImageExtractor] FFmpeg images exception: {e}")
-            try:
-                event_system.emit(
-                    Events.IMAGE_EXTRACTION_ERROR, message=str(e))
-            except Exception:
-                pass
             return {'success': False, 'extracted_count': 0, 'message': str(e)}

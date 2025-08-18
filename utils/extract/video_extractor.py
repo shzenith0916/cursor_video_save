@@ -20,7 +20,8 @@ class VideoExtractor:
             '-c:a', 'aac',
             '-strict', 'experimental'
         ]
-        command.append(output_path)
+        command.append(output_path)  # FFmpeg 커맨드에서 마지막은 항상 출력 파일 경로.
+
         return command
 
     @staticmethod

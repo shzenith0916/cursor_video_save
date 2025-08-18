@@ -4,10 +4,17 @@ import webbrowser
 from tkinter import messagebox
 import shutil
 import os
+from utils.utils import show_custom_messagebox
 
 
 class FFmpegManager:
-    """FFmpeg 관리 및 자동 설치 가능"""
+    """FFmpeg 설치 상태 확인 및 경로 관리
+
+    기능:
+    - 시스템에서 FFmpeg 자동 탐지 (PATH, 일반적인 설치 경로)
+    - FFmpeg 실행 경로 관리 및 제공
+    - 설치 안내 메시지 제공 (자동 설치는 지원하지 않음)
+    """
 
     def __init__(self, parent_frame=None):
         self.parent_frame = parent_frame
@@ -93,3 +100,15 @@ class FFmpegManager:
             return f"버전정보 확인 실패: {e}"
 
         return "버전정보 없음"
+
+    def require_ffmpeg_or_show_error(self, parent_frame, extraction_type):
+        """FFmpeg가 필요한 작업에서 사용. 없으면 에러 메시지 표시하고 False 반환"""
+        if self.is_available():
+            return True
+
+        available, message = self.ensure_ffmpeg_available()
+        show_custom_messagebox(
+            parent_frame, "FFmpeg 필요",
+            f"{extraction_type} 추출을 위해 FFmpeg가 필요합니다.\n\n{message}",
+            "warning")
+        return False

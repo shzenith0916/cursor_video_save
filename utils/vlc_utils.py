@@ -1,8 +1,46 @@
 import vlc
+import os
+import sys
 import threading
 import time
 import platform
 from .event_system import event_system, Events
+
+
+def setup_bundled_vlc():
+    """번들된 VLC 환경 설정"""
+    try:
+        if getattr(sys, 'frozen', False):
+            # PyInstaller로 패키징된 경우
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(
+                os.path.dirname(os.path.abspath(__file__)))
+
+        # VLC 플러그인 경로 설정
+        vlc_plugins_path = os.path.join(base_path, 'vlc', 'plugins')
+        if os.path.exists(vlc_plugins_path):
+            os.environ['VLC_PLUGIN_PATH'] = vlc_plugins_path
+            print(f"VLC 플러그인 경로 설정: {vlc_plugins_path}")
+
+        # DLL 검색 경로 추가 (Windows 10+)
+        if hasattr(os, 'add_dll_directory') and os.path.exists(base_path):
+            try:
+                os.add_dll_directory(base_path)
+                print(f"DLL 검색 경로 추가: {base_path}")
+            except OSError as e:
+                print(f"DLL 검색 경로 추가 실패: {e}")
+
+        return True
+
+    except Exception as e:
+        print(f"번들된 VLC 설정 오류: {e}")
+        return False
+
+
+# VLC 초기화 전에 환경 설정
+setup_bundled_vlc()
+
 
 # VLC 이벤트 → vlc_utils.py → event_system → main_tab.py → UI 업데이트
 

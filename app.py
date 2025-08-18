@@ -12,6 +12,8 @@ from utils.vlc_utils import VLCPlayer
 from utils.event_system import event_system, Events
 from ui_components import create_tabs
 from ui_components.preview_window import PreviewWindow
+from utils.vlc_checker import SystemChecker
+from utils.ffmpeg_manager import FFmpegManager
 
 
 class VideoEditorApp:
@@ -128,9 +130,22 @@ class VideoEditorApp:
         if not hasattr(self, 'vlc_player') or not self.vlc_player:
             print("App: VLCPlayer 인스턴스 생성")
             self.vlc_player = VLCPlayer()
+            # 필수 구성 요소 설치 확인 (FFmpegManager 활용)
+
+            ffmpeg_manager = FFmpegManager()
+            vlc_installed, ffmpeg_installed = SystemChecker.check_and_warn(
+                self.root, ffmpeg_manager, show_warning=False)
+
+            if not vlc_installed:
+                print("⚠️ VLC가 설치되지 않음 - 비디오 재생 기능이 제한될 수 있습니다.")
+            if not ffmpeg_installed:
+                print("⚠️ FFmpeg가 설치되지 않음 - 추출 기능이 제한될 수 있습니다.")
+
         # VLC 플레이어가 제대로 초기화되었는지 확인
             if not self.vlc_player or not hasattr(self.vlc_player, 'media_player') or not self.vlc_player.media_player:
                 print("App: VLC 플레이어 초기화 실패")
+                # VLC 초기화 실패 시 설치 안내 표시
+                SystemChecker.show_install_guide(self.root, ffmpeg_manager)
                 return False
         return True
 

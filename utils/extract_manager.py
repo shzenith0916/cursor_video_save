@@ -68,14 +68,8 @@ class ExtractionManager:
                     return
 
             # FFmpeg 확인
-            if self.ffmpeg_manager:
-                available, message = self.ffmpeg_manager.ensure_ffmpeg_available()
-                if not available:
-                    show_custom_messagebox(
-                        self.parent_frame, "FFmpeg 필요",
-                        f"비디오 추출을 위해 FFmpeg가 필요합니다.\n\n{message}",
-                        "warning")
-                    return
+            if self.ffmpeg_manager and not self.ffmpeg_manager.require_ffmpeg_or_show_error(self.parent_frame, "비디오"):
+                return
 
             # 입력 파일 찾기
             input_path = self._find_input_file(segment_info)
@@ -91,9 +85,13 @@ class ExtractionManager:
             self._start_video_extraction(input_path, output_path, segment_info)
 
         except Exception as e:
-            show_custom_messagebox(
-                self.parent_frame, "오류",
-                f"비디오 추출 준비 중 오류: {str(e)}", "error")
+            self._handle_extraction_error("비디오", e)
+
+    def _handle_extraction_error(self, extraction_type, error):
+        """추출 준비 중 에러 처리"""
+        show_custom_messagebox(
+            self.parent_frame, "오류",
+            f"{extraction_type} 추출 준비 중 오류: {str(error)}", "error")
 
     def extract_images(self, segment_info=None):
         """선택한 구간에서 이미지 추출"""
@@ -127,9 +125,7 @@ class ExtractionManager:
                 input_path, output_folder, segment_info)
 
         except Exception as e:
-            show_custom_messagebox(
-                self.parent_frame, "오류",
-                f"이미지 추출 준비 중 오류: {str(e)}", "error")
+            self._handle_extraction_error("이미지", e)
 
     def extract_audio(self, segment_info=None):
         """오디오 추출"""
@@ -148,14 +144,8 @@ class ExtractionManager:
                     return
 
             # FFmpeg 확인 (오디오 추출에는 필수)
-            if self.ffmpeg_manager:
-                available, message = self.ffmpeg_manager.ensure_ffmpeg_available()
-                if not available:
-                    show_custom_messagebox(
-                        self.parent_frame, "FFmpeg 필요",
-                        f"오디오 추출을 위해 FFmpeg가 필요합니다.\n\n{message}",
-                        "error")
-                    return
+            if self.ffmpeg_manager and not self.ffmpeg_manager.require_ffmpeg_or_show_error(self.parent_frame, "오디오"):
+                return
 
             # 입력 파일 찾기
             input_path = self._find_input_file(segment_info)
@@ -173,9 +163,7 @@ class ExtractionManager:
                 input_path, output_folder, segment_info)
 
         except Exception as e:
-            show_custom_messagebox(
-                self.parent_frame, "오류",
-                f"오디오 추출 준비 중 오류: {str(e)}", "error")
+            self._handle_extraction_error("오디오", e)
 
     def _get_selected_segment_info(self):
         """선택된 구간 정보 가져오기"""
@@ -360,15 +348,13 @@ class ExtractionManager:
                 return
 
             # extract/video_extractor.py 의 VideoExtractor로 추출
-            ffmpeg_exec = (self.ffmpeg_manager.ffmpeg_path
-                           if self.ffmpeg_manager and self.ffmpeg_manager.ffmpeg_path else 'ffmpeg')
             result = VideoExtractor.extract_segment(
                 input_video_path=input_path,
                 output_video_path=output_path,
                 start_time=segment_info['start'],
                 end_time=segment_info['end'],
                 progress_callback=self._video_progress_callback,
-                ffmpeg_executable=ffmpeg_exec
+                ffmpeg_executable=self._get_ffmpeg_executable()
             )
 
             # 결과 이벤트 발생
@@ -387,7 +373,17 @@ class ExtractionManager:
                 self._emit_extraction_cancelled()
                 return
 
-            # ImageUtils를 사용하여 프레임 추출
+            # 이미지 추출 시작 이벤트
+            event_system.emit(
+                Events.IMAGE_EXTRACTION_START,
+                input_path=input_path,
+                output_folder=output_folder,
+                start_time=segment_info['start'],
+                end_time=segment_info['end'],
+                method='opencv'
+            )
+
+            # extract/ImageExtractor.py의 메서드드를 사용하여 프레임 추출
             result = ImageExtractor.extract_frames_from_video(
                 input_path=input_path,
                 output_folder=output_folder,
@@ -399,15 +395,24 @@ class ExtractionManager:
 
             # OpenCV가 실패하거나 0개 추출 시 FFmpeg 폴백 시도
             if (not result) or (result.get('extracted_count', 0) == 0):
-                print("OpenCV 이미지 추출 결과가 0개입니다. FFmpeg 폴백을 시도합니다.")
-                ffmpeg_exec = (self.ffmpeg_manager.ffmpeg_path
-                               if self.ffmpeg_manager and self.ffmpeg_manager.ffmpeg_path else 'ffmpeg')
+                print("OpenCV 이미지 추출 결과가 0개입니다. FFmpeg 폴백(이미지 추출)을 시도합니다.")
+
+                # FFmpeg 폴백 시작 이벤트
+                event_system.emit(
+                    Events.IMAGE_EXTRACTION_START,
+                    input_path=input_path,
+                    output_folder=output_folder,
+                    start_time=segment_info['start'],
+                    end_time=segment_info['end'],
+                    method='ffmpeg_fallback'
+                )
+
                 ff_result = ImageExtractor.extract_frames_with_ffmpeg(
                     input_path=input_path,
                     output_folder=output_folder,
                     start_time=segment_info['start'],
                     end_time=segment_info['end'],
-                    ffmpeg_executable=ffmpeg_exec
+                    ffmpeg_executable=self._get_ffmpeg_executable()
                 )
                 if ff_result.get('success') and ff_result.get('extracted_count', 0) > 0:
                     # 폴백 성공 시 결과 변환하여 동일 경로로 전달
@@ -419,8 +424,8 @@ class ExtractionManager:
                     }
                 else:
                     # 폴백 실패 시 에러 이벤트
-                    self.parent_frame.after(0, lambda: self._emit_extraction_error(
-                        ff_result.get('message', 'FFmpeg 폴백 실패')))
+                    error_msg = ff_result.get('message', 'FFmpeg 폴백 실패')
+                    self._handle_image_extraction_error(error_msg)
                     return
 
             # 결과 이벤트 발생
@@ -428,9 +433,14 @@ class ExtractionManager:
                 0, lambda: self._emit_image_extraction_complete(result, output_folder))
 
         except Exception as e:
-            self.parent_frame.after(
-                0, lambda err=e: self._emit_extraction_error(str(err)))
-            # 에러 부분 수정. e로 그대로 넣으면 안되고 err로 한번 더 감싸서 처리
+            error_msg = f"이미지 추출 중 오류 발생: {str(e)}"
+            self._handle_image_extraction_error(error_msg)
+
+    def _handle_image_extraction_error(self, error_msg):
+        """이미지 추출 에러 처리 (이벤트 + UI)"""
+        event_system.emit(Events.IMAGE_EXTRACTION_ERROR, message=error_msg)
+        self.parent_frame.after(
+            0, lambda: self._emit_extraction_error(error_msg))
 
     def _do_audio_extraction(self, input_path, output_folder, segment_info):
         """실제 오디오 추출 작업 (백그라운드)"""
@@ -446,8 +456,6 @@ class ExtractionManager:
             audio_filename = f"{base_filename}_{timestamp}.mp3"
             output_path = os.path.join(output_folder, audio_filename)
 
-            ffmpeg_exec = (self.ffmpeg_manager.ffmpeg_path
-                           if self.ffmpeg_manager and self.ffmpeg_manager.ffmpeg_path else 'ffmpeg')
             result = AudioExtractor.extract_audio_segment(
                 input_video_path=input_path,
                 output_audio_path=output_path,
@@ -456,7 +464,7 @@ class ExtractionManager:
                 progress_callback=self._audio_progress_callback,
                 audio_format='mp3',
                 audio_quality='192k',
-                ffmpeg_executable=ffmpeg_exec
+                ffmpeg_executable=self._get_ffmpeg_executable()
             )
 
             # 결과 이벤트 발생
@@ -484,32 +492,14 @@ class ExtractionManager:
                 status=f"이미지 {extracted_count}/{total_frames} 저장 중..."
             ))
 
-    def _audio_progress_callback(self, *args, **kwargs):
-        """오디오 추출 진행률 콜백 (메시지/퍼센트 모두 대응)"""
-        if self.cancel_event.is_set():
-            return
-        # 기본값
-        progress = kwargs.get('progress')
-        status_text = kwargs.get('status', None)
-        if progress is None:
-            if args:
-                first = args[0]
-                if isinstance(first, (int, float)):
-                    progress = float(first)
-                    status_text = status_text or f"오디오 처리 중... {progress:.1f}%"
-                else:
-                    # 문자열 메시지 등
-                    status_text = status_text or str(first)
-                    progress = 50
-            else:
-                progress = 50
-        if not status_text:
-            status_text = f"오디오 처리 중... {progress:.1f}%"
-        self.parent_frame.after(0, lambda: event_system.emit(
-            Events.AUDIO_EXTRACTION_PROGRESS,
-            progress=progress,
-            status=status_text
-        ))
+    def _audio_progress_callback(self, message="오디오 추출 중..."):
+        """오디오 추출 진행률 콜백"""
+        if not self.cancel_event.is_set():
+            self.parent_frame.after(0, lambda: event_system.emit(
+                Events.AUDIO_EXTRACTION_PROGRESS,
+                progress=50,
+                status=message
+            ))
 
     def _emit_video_extraction_complete(self, result):
         """비디오 추출 완료 이벤트 발생"""
@@ -640,7 +630,8 @@ class ExtractionManager:
         event_system.emit(
             Events.EXTRACTION_CANCEL,
             progress=0,
-            status="취소됨", \)
+            status="취소됨"
+        )
 
     @staticmethod
     def open_file_location(file_path):
@@ -725,71 +716,7 @@ class ExtractionManager:
         """스레드 안전한 진행률 업데이트 헬퍼 메서드"""
         self.frame.after(0, lambda: self.update_progress(value, status, icon))
 
-# -----------------------------------------------------------------------------------------------
-
-    def do_extraction(self, input_path, output_path, segment_info):
-        """실제 추출 작업 (백그라운드)"""
-        try:
-            # 취소 이벤트 초기화
-            self.cancel_event.clear()
-
-            # 취소 확인 (한 번만 체크)
-            if self.cancel_event.is_set():
-                self.update_progress_safe(0, "취소됨", "취소")
-                return
-
-            # 시작 상태 업데이트
-            self.update_progress_safe(0, "추출 시작...", "시작...")
-
-            # VideoExtractor로 추출 (코덱 복사 옵션 제거)
-            result = VideoExtractor.extract_segment(
-                input_video_path=input_path,
-                output_video_path=output_path,
-                start_time=segment_info['start'],
-                end_time=segment_info['end'],
-                progress_callback=self.extraction_progress_callback
-            )
-
-            # 결과 표시
-            self.frame.after(0, lambda: self.show_extraction_result(result))
-
-        except Exception as e:
-            # 오류 발생 시, lambda 기본 인자를 사용하여 현재의 e 값을 캡처
-            self.frame.after(
-                0, lambda error=e: self.show_extraction_error(error))
-
-    def extraction_progress_callback(self, msg):
-        """추출 진행률 콜백"""
-        if not self.cancel_event.is_set():  # 취소되지 않은 경우만 업데이트
-            self.update_progress_safe(50, f"🔄 {msg}", "⚙️")
-
-    def show_extraction_result(self, result):
-        """추출 결과 표시"""
-        # 추출 완료 후 플래그 리셋
-        self._is_extracting = False
-
-        if result['success']:
-            self.update_progress(100, "추출 완료!", "✅")
-            show_custom_messagebox(
-                self.frame, "비디오 추출 완료", "추출 성공!", "success")
-
-        else:
-            self.update_progress(0, " 추출 실패", "❌")
-            show_custom_messagebox(
-                self.frame, "실패", f"추출 실패: {result['message']}", "error")
-
-        # 5초 후 진행률 바 초기화
-        self.frame.after(5000, lambda: self.update_progress(0, "대기 중...", "⚡"))
-
-    def show_extraction_error(self, error):
-        """추출 오류 표시"""
-        # 추출 오류 후 플래그 리셋
-        self._is_extracting = False
-
-        self.update_progress(0, "오류 발생", "⚠️")
-        show_custom_messagebox(
-            self.frame, "오류", f"추출 중 오류: {str(error)}", "warning")
-
-    def update_progress_safe(self, value, status="", icon="⚡", **kwargs):  # 백그라운드 작업
-        """스레드 안전한 진행률 업데이트 헬퍼 메서드"""
-        self.frame.after(0, lambda: self.update_progress(value, status, icon))
+    def _get_ffmpeg_executable(self):
+        """FFmpeg 실행 경로 가져오기"""
+        return (self.ffmpeg_manager.ffmpeg_path
+                if self.ffmpeg_manager and self.ffmpeg_manager.ffmpeg_path else 'ffmpeg')
