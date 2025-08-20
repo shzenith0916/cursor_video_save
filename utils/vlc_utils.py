@@ -5,6 +5,7 @@ import threading
 import time
 import platform
 from .event_system import event_system, Events
+import ctypes
 
 
 def setup_bundled_vlc():
@@ -12,35 +13,56 @@ def setup_bundled_vlc():
     try:
         if getattr(sys, 'frozen', False):
             # PyInstaller로 패키징된 경우
-            base_path = sys._MEIPASS
+            if hasattr(sys, '_MEIPASS'):
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.dirname(sys.executable)
         else:
             base_path = os.path.dirname(
                 os.path.dirname(os.path.abspath(__file__)))
 
+        print(f"VLC 환경 설정 시작, base_path: {base_path}")
+
+        # VLC 루트 경로 설정
+        vlc_root = os.path.join(base_path, '_internal', 'vlc')
+        if not os.path.exists(vlc_root):
+            print(f"⚠️ VLC 루트 경로를 찾을 수 없음: {vlc_root}")
+            return False
+
         # VLC 플러그인 경로 설정
-        vlc_plugins_path = os.path.join(base_path, 'vlc', 'plugins')
-        if os.path.exists(vlc_plugins_path):
-            os.environ['VLC_PLUGIN_PATH'] = vlc_plugins_path
-            print(f"VLC 플러그인 경로 설정: {vlc_plugins_path}")
+        plugins_path = os.path.join(vlc_root, 'plugins')
+        if os.path.exists(plugins_path):
+            os.environ['VLC_PLUGIN_PATH'] = plugins_path
+            print(f"✓ VLC 플러그인 경로 설정: {plugins_path}")
+        else:
+            print("⚠️ VLC 플러그인 경로를 찾을 수 없음")
+            return False
 
         # DLL 검색 경로 추가 (Windows 10+)
-        if hasattr(os, 'add_dll_directory') and os.path.exists(base_path):
+        if hasattr(os, 'add_dll_directory'):
             try:
-                os.add_dll_directory(base_path)
-                print(f"DLL 검색 경로 추가: {base_path}")
-            except OSError as e:
+                os.add_dll_directory(vlc_root)
+                print(f"✓ DLL 검색 경로 추가: {vlc_root}")
+            except Exception as e:
                 print(f"DLL 검색 경로 추가 실패: {e}")
+                return False
+
+        # python-vlc가 libvlc를 찾도록 환경 변수 설정
+        os.environ['PYTHON_VLC_MODULE_PATH'] = vlc_root
+        os.environ['PYTHON_VLC_LIB_PATH'] = vlc_root
+        print(f"✓ PYTHON_VLC_MODULE_PATH/LIB_PATH 설정: {vlc_root}")
+
+        # PATH 환경변수에도 VLC 경로 추가
+        current_path = os.environ.get('PATH', '')
+        if vlc_root not in current_path:
+            os.environ['PATH'] = vlc_root + os.pathsep + current_path
+            print(f"✓ PATH에 추가: {vlc_root}")
 
         return True
 
     except Exception as e:
         print(f"번들된 VLC 설정 오류: {e}")
         return False
-
-
-# VLC 초기화 전에 환경 설정
-setup_bundled_vlc()
-
 
 # VLC 이벤트 → vlc_utils.py → event_system → main_tab.py → UI 업데이트
 
@@ -108,8 +130,18 @@ class VLCPlayer:
             if self.media:
                 self.media.release()
 
-            # 미디어 객체 생성
-            self.media = self.vlc_instance.media_new(video_path)
+            # 경로 정규화 및 URI 변환 (한글/공백/유니코드 경로 대응)
+            try:
+                from pathlib import Path
+                path_obj = Path(video_path).resolve()
+                if not path_obj.exists():
+                    print(f"VLC 로드: 파일이 존재하지 않습니다 - {video_path}")
+                file_uri = path_obj.as_uri()
+                print(f"VLC 로드: 파일 URI 사용 - {file_uri}")
+                self.media = self.vlc_instance.media_new(file_uri)
+            except Exception as uri_e:
+                print(f"VLC 로드: URI 변환 실패, 원본 경로로 시도 - {uri_e}")
+                self.media = self.vlc_instance.media_new(video_path)
             if not self.media:
                 print("미디어 객체 생성 실패")
                 return False
@@ -400,3 +432,7 @@ class VLCPlayer:
             self.media.release()
         if self.vlc_instance:
             self.vlc_instance.release()
+
+
+# VLC 초기화 전에 환경 설정
+setup_bundled_vlc()

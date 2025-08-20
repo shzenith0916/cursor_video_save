@@ -8,23 +8,43 @@ import os
 import sys
 import subprocess
 import shutil
+import stat
 from pathlib import Path
 
 
 def clean_build_files():
     """빌드 관련 파일들을 정리합니다."""
     dirs_to_clean = ['build', 'dist', '__pycache__']
-    files_to_clean = ['*.spec']
+    files_to_clean = ['video_player.spec']  # 기존 자동 생성 spec만 정리
+
+    def _handle_remove_error(func, path, exc_info):
+        # 읽기 전용/권한 문제 시 권한 수정 후 재시도, 그래도 실패하면 경고만 출력
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception as e:
+            print(f"⚠️ 삭제 건너뜀 (잠겨있을 수 있음): {path} ({e})")
 
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
-            shutil.rmtree(dir_name)
-            print(f"✓ {dir_name} 디렉터리 삭제됨")
+            try:
+                shutil.rmtree(dir_name, onerror=_handle_remove_error)
+                print(f"✓ {dir_name} 디렉터리 삭제됨")
+            except Exception as e:
+                print(f"⚠️ {dir_name} 삭제 중 오류: {e}")
+                print(
+                    "   실행 중인 .exe가 있으면 종료 후 다시 시도하세요 (예: taskkill /IM videoplayer.exe /F)")
 
-    # .spec 파일 삭제
-    for spec_file in Path('.').glob('*.spec'):
-        spec_file.unlink()
-        print(f"✓ {spec_file} 파일 삭제됨")
+    # 자동 생성되는 spec만 삭제하고, 수동 관리 spec은 보존
+    # simple_video_player.spec 등은 보존
+    for target in files_to_clean:
+        for spec_file in Path('.').glob(target):
+            if spec_file.name.lower() == 'video_player.spec':
+                try:
+                    spec_file.unlink()
+                    print(f"✓ {spec_file} 파일 삭제됨")
+                except Exception as e:
+                    print(f"⚠️ {spec_file} 삭제 실패: {e}")
 
 
 def check_dependencies():
@@ -265,9 +285,7 @@ def compile_inno_setup():
 def create_spec_file():
     """PyInstaller spec 파일을 생성합니다."""
 
-    # VLC 번들러 초기화
-    from utils.vlc_bundler import VLCBundler
-    VLCBundler.print_bundle_info()
+    # VLC 번들링 도구 제거: 단순 spec 기반 빌드로 전환
 
     # ttkbootstrap 테마 경로 동적 찾기
     try:
@@ -277,14 +295,14 @@ def create_spec_file():
         themes_path = os.path.join(ttkbootstrap_path, 'themes')
 
         if os.path.exists(themes_path):
-            datas_section = f"(r'{themes_path}', 'ttkbootstrap/themes'),\n        ('EULA.txt', '.'),\n        ('INSTALL.md', '.'),"
+            datas_section = f"(r'{themes_path}', 'ttkbootstrap/themes'),\n        ('EULA.txt', '.'),\n        ('INSTALL.md', '.')"
             print(f"✓ ttkbootstrap 테마 경로 찾음: {themes_path}")
         else:
             # 테마 경로를 찾을 수 없으면 기본 파일들만 추가
-            datas_section = "('EULA.txt', '.'),\n        ('INSTALL.md', '.'),"
+            datas_section = "('EULA.txt', '.'),\n        ('INSTALL.md', '.')"
             print("⚠️  ttkbootstrap 테마 경로를 찾을 수 없음")
     except ImportError:
-        datas_section = "('EULA.txt', '.'),\n        ('INSTALL.md', '.'),"
+        datas_section = "('EULA.txt', '.'),\n        ('INSTALL.md', '.')"
         print("⚠️  ttkbootstrap 모듈을 찾을 수 없음")
 
     # 아이콘 파일 경로 확인
@@ -298,9 +316,9 @@ def create_spec_file():
     # 아이콘 설정 생성
     icon_setting = f'r"{icon_path}"' if icon_path else 'None'
 
-    # VLC 바이너리와 데이터 가져오기
-    vlc_binaries = VLCBundler.get_vlc_binaries()
-    vlc_data = VLCBundler.get_vlc_data()
+    # VLC 바이너리와 데이터는 simple spec에서 직접 정의
+    vlc_binaries = []
+    vlc_data = []
 
     # 바이너리 섹션 생성
     binaries_section = ""
@@ -331,8 +349,11 @@ a = Analysis(
         'ttkbootstrap.themes',
         'ttkbootstrap.themes.standard',
         'vlc',
-        # 'pygame.mixer',
-        # 'pygame._view',
+        # VLC 관련 추가 모듈들
+        'vlc.generated.vlc_structures',
+        'vlc.generated.libvlc_structures', 
+        'ctypes.wintypes',
+        'ctypes.util',
         'cv2',
         'numpy',
         'PIL._tkinter_finder',
@@ -421,10 +442,12 @@ def build_executable():
         '--hidden-import', 'ttkbootstrap.themes',
         '--hidden-import', 'ttkbootstrap.themes.standard',
         '--hidden-import', 'vlc',
+        '--hidden-import', 'vlc.generated.vlc_structures',
+        '--hidden-import', 'vlc.generated.libvlc_structures',
+        '--hidden-import', 'ctypes.wintypes',
+        '--hidden-import', 'ctypes.util',
         '--hidden-import', 'pythoncom',
         '--hidden-import', 'pywintypes',
-        # '--hidden-import', 'pygame.mixer',
-        # '--hidden-import', 'pygame._view',
         '--hidden-import', 'cv2',
         '--hidden-import', 'numpy',
         '--hidden-import', 'PIL._tkinter_finder',
@@ -452,13 +475,14 @@ def build_executable():
 
     try:
         result = subprocess.run(
-            cmd, check=True, capture_output=True, text=True)
+            cmd, check=True, capture_output=True, text=True,
+            encoding='utf-8', errors='ignore')
         print("✓ 빌드 성공!")
 
         # --onedir의 경우 폴더 구조로 생성됨
-        dist_folder = os.path.join('dist', '비디오플레이어')
-        build_folder = os.path.join('build', '비디오플레이어')
-        exe_file = os.path.join(build_folder, '비디오플레이어.exe')
+        dist_folder = os.path.join('dist', 'videoplayer')
+        build_folder = os.path.join('build', 'videoplayer')
+        exe_file = os.path.join(build_folder, 'videoplayer.exe')
 
         # dist 폴더를 build 폴더로 복사 (Inno Setup 준비)
         if os.path.exists(dist_folder):
@@ -504,28 +528,44 @@ def build_with_spec():
     """spec 파일을 사용하여 빌드합니다."""
     print("\n🔨 spec 파일로 빌드 시작...")
 
-    cmd = [sys.executable, '-m', 'PyInstaller', 'video_player.spec']
+    # simple spec가 있으면 우선 사용, 없으면 기존 spec 사용
+    preferred_spec = 'simple_video_player_onedir.spec' if os.path.exists(
+        'simple_video_player_onedir.spec') else 'video_player.spec'
+    if preferred_spec == 'simple_video_player_onedir.spec':
+        print("✓ simple_video_player_onedir.spec 파일 감지됨 – 해당 파일로 빌드합니다")
+    else:
+        print("ℹ️ simple_video_player_onedir.spec 없음 – video_player.spec로 빌드합니다")
+
+    cmd = [sys.executable, '-m', 'PyInstaller', preferred_spec]
 
     try:
         result = subprocess.run(
-            cmd, check=True, capture_output=True, text=True)
+            cmd, check=True, capture_output=True, text=True,
+            encoding='utf-8', errors='ignore')
         print("✓ spec 파일 빌드 성공!")
 
-        # 결과 파일 확인
-        exe_folder = os.path.join('dist', '비디오플레이어')
-        exe_file = os.path.join(exe_folder, '비디오플레이어.exe')
+        # 결과 파일 확인 (spec 종류에 따라 경로가 다름)
+        if preferred_spec == 'simple_video_player.spec':
+            # one-file exe로 생성됨
+            exe_path = os.path.join('dist', 'videoplayer.exe')
+            if os.path.exists(exe_path):
+                print(f"🗂️  실행파일: {exe_path}")
+                print("📊 출력 유형: one-file EXE")
+        else:
+            # video_player.spec은 onedir로 생성됨
+            exe_folder = os.path.join('dist', '비디오플레이어')
+            exe_file = os.path.join(exe_folder, '비디오플레이어.exe')
+            if os.path.exists(exe_file):
+                print(f"📁 실행파일 폴더: {exe_folder}")
+                print(f"🗂️  실행파일: {exe_file}")
 
-        if os.path.exists(exe_file):
-            print(f"📁 실행파일 폴더: {exe_folder}")
-            print(f"🗂️  실행파일: {exe_file}")
-
-            # 폴더 크기 계산
-            folder_size = sum(
-                os.path.getsize(os.path.join(dirpath, filename))
-                for dirpath, dirnames, filenames in os.walk(exe_folder)
-                for filename in filenames
-            ) / (1024*1024)  # MB
-            print(f"📊 전체 크기: {folder_size:.1f} MB")
+                # 폴더 크기 계산
+                folder_size = sum(
+                    os.path.getsize(os.path.join(dirpath, filename))
+                    for dirpath, dirnames, filenames in os.walk(exe_folder)
+                    for filename in filenames
+                ) / (1024*1024)  # MB
+                print(f"📊 전체 크기: {folder_size:.1f} MB")
 
     except subprocess.CalledProcessError as e:
         print(f"❌ 빌드 실패: {e}")
@@ -561,9 +601,14 @@ def main():
     choice = input("선택하세요 (1, 2, 3, 기본값: 1): ").strip() or '1'
 
     if choice == '2':
-        # spec 파일 생성 후 빌드
-        create_spec_file()
-        success = build_with_spec()
+        # simple spec이 있으면 생성 생략하고 바로 빌드
+        if os.path.exists('simple_video_player_onedir.spec'):
+            print("\n✓ 기존 simple_video_player_onedir.spec을 사용하여 빌드합니다 (spec 생성 생략)")
+            success = build_with_spec()
+        else:
+            # simple spec이 없으면 기존 로직대로 spec 생성 (video_player.spec) 후 빌드
+            create_spec_file()
+            success = build_with_spec()
     elif choice == '3':
         # 빌드 후 인스톨러 자동 생성
         success = build_executable()
