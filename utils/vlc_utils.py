@@ -23,8 +23,8 @@ def setup_bundled_vlc():
 
         print(f"VLC 환경 설정 시작, base_path: {base_path}")
 
-        # VLC 루트 경로 설정
-        vlc_root = os.path.join(base_path, '_internal', 'vlc')
+        # VLC 루트 경로 설정 (base_path가 이미 _internal을 포함하므로 vlc만 추가)
+        vlc_root = os.path.join(base_path, 'vlc')
         if not os.path.exists(vlc_root):
             print(f"⚠️ VLC 루트 경로를 찾을 수 없음: {vlc_root}")
             return False
@@ -79,14 +79,21 @@ class VLCPlayer:
             '--intf=dummy',  # 인터페이스 비활성화
         ]
 
+        # 플러그인 경로가 설정되어 있으면 추가
+        plugin_path = os.environ.get('VLC_PLUGIN_PATH')
+        if plugin_path:
+            print(f"VLC 인스턴스 생성: 플러그인 경로 추가 - {plugin_path}")
+            vlc_args.extend(['--plugin-path', plugin_path])
+
         try:
+            print(f"VLC 인스턴스 생성 시도: {vlc_args}")
             self.vlc_instance = vlc.Instance(vlc_args)
             if not self.vlc_instance:
-                raise Exception("VLC 인스턴스 생성 실패")
+                raise Exception("VLC 인스턴스가 None을 반환")
 
             self.media_player = self.vlc_instance.media_player_new()
             if not self.media_player:
-                raise Exception("VLC 미디어 플레이어 생성 실패")
+                raise Exception("VLC 미디어 플레이어가 None을 반환")
 
             print("VLC 인스턴스 및 미디어 플레이어 생성 성공")
         except Exception as e:
