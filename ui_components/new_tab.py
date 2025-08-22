@@ -162,11 +162,9 @@ class NewTab(BaseTab):
     def create_info_section(self):
         """파일 정보 섹션 생성"""
 
-        # 1) 파일 정보 영역 (고정 높이)
-        file_info_container = ttk.Frame(
-            self.info_frame, height=int(550 * UiUtils.get_scaling_factor_by_dpi(self.root)))
+        # 1) 파일 정보 영역 (가변 높이 - DPI/창 크기에 맞춰 자동 조절)
+        file_info_container = ttk.Frame(self.info_frame)
         file_info_container.pack(fill=ttk.X, pady=(0, 5))
-        file_info_container.pack_propagate(False)
 
         # 정보 표시 레이블
         info_title = ttk.Label(
@@ -190,10 +188,10 @@ class NewTab(BaseTab):
         )
         self.file_info_label.pack(fill=ttk.X, padx=10, pady=10, anchor="nw")
 
-        # 2) 버튼 영역 (고정 높이)
+        # 2) 버튼 영역 (가변 높이)
         self.create_info_buttons()
 
-        # 3) 진행률 영역 (고정 높이)
+        # 3) 진행률 영역 (가변 높이)
         self.create_progress_controls()
 
     def file_info_update(self, file_path=None, start_time=None, end_time=None):
@@ -240,11 +238,9 @@ class NewTab(BaseTab):
 
     def create_info_buttons(self):
         """파일 정보 영역 하단 버튼들 생성 - main_tab 스타일 적용"""
-        # 버튼 영역 컨테이너 (고정 높이)
-        button_container = ttk.Frame(
-            self.info_frame, height=int(230 * UiUtils.get_scaling_factor_by_dpi(self.root)))
+        # 버튼 영역 컨테이너 (가변 높이)
+        button_container = ttk.Frame(self.info_frame)
         button_container.pack(fill=ttk.X, pady=(0, 5))
-        button_container.pack_propagate(False)
 
         # 구분선 추가
         separator = ttk.Separator(button_container, orient="horizontal")
@@ -293,11 +289,9 @@ class NewTab(BaseTab):
 
     def create_progress_controls(self):
         """가장 아래에 작업 진행률 생성"""
-        # 진행률 영역 컨테이너 (고정 높이)
-        progress_container = ttk.Frame(
-            self.info_frame, height=int(120 * UiUtils.get_scaling_factor_by_dpi(self.root)))
+        # 진행률 영역 컨테이너 (가변 높이)
+        progress_container = ttk.Frame(self.info_frame)
         progress_container.pack(fill=ttk.X, pady=(0, 10))
-        progress_container.pack_propagate(False)
 
         # 구분선 추가
         separator = ttk.Separator(progress_container, orient="horizontal")
@@ -316,12 +310,12 @@ class NewTab(BaseTab):
         progress_frame.pack(fill=ttk.X, padx=10, pady=(5, 5))
 
         # 프로그레스바와 퍼센티지를 수평으로 배치
-        progress_container = ttk.Frame(progress_frame)
-        progress_container.pack(fill=ttk.X, pady=(0, 5))
+        progress_row = ttk.Frame(progress_frame)
+        progress_row.pack(fill=ttk.X, pady=(0, 5))
 
         # ttkbootstrap 스타일 프로그래스바
         self.progress_bar = ttk.Progressbar(
-            progress_container,
+            progress_row,
             orient="horizontal",
             mode="determinate",
             bootstyle="success-striped"
@@ -331,10 +325,9 @@ class NewTab(BaseTab):
 
         # 퍼센티지 표시
         self.progress_percentage = ttk.Label(
-            progress_container,
+            progress_row,
             text="0%",
-            font=("Arial", 10, "bold"),
-            width=6
+            font=("Arial", 10, "bold")
         )
         self.progress_percentage.pack(side=ttk.RIGHT)
 

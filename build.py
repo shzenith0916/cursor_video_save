@@ -10,10 +10,40 @@ import subprocess
 import shutil
 import stat
 from pathlib import Path
+import textwrap
+
+
+def get_vlc_path():
+    """VLC 설치 경로를 찾습니다."""
+    possible_paths = [
+        r"C:\Program Files\VideoLAN\VLC",  # 64비트
+        r"C:\Program Files (x86)\VideoLAN\VLC",  # 32비트
+    ]
+
+    for path in possible_paths:
+        if os.path.exists(path) and os.path.exists(os.path.join(path, 'libvlc.dll')):
+            return path
+    return None
 
 
 def clean_build_files():
     """빌드 관련 파일들을 정리합니다."""
+    # 실행 중일 수 있는 EXE 프로세스를 우선 종료 (파일 잠금 해제)
+    try:
+        for exe_name in ['videoplayer.exe', '비디오플레이어.exe']:
+            try:
+                subprocess.run(
+                    ["taskkill", "/IM", exe_name, "/F"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    encoding='cp949',
+                    errors='ignore'
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
     dirs_to_clean = ['build', 'dist', '__pycache__']
     files_to_clean = ['video_player.spec']  # 기존 자동 생성 spec만 정리
 
@@ -35,8 +65,7 @@ def clean_build_files():
                 print(
                     "   실행 중인 .exe가 있으면 종료 후 다시 시도하세요 (예: taskkill /IM videoplayer.exe /F)")
 
-    # 자동 생성되는 spec만 삭제하고, 수동 관리 spec은 보존
-    # simple_video_player.spec 등은 보존
+    # spec 파일 삭제
     for target in files_to_clean:
         for spec_file in Path('.').glob(target):
             if spec_file.name.lower() == 'video_player.spec':
@@ -64,8 +93,6 @@ def check_dependencies():
         'Pillow': 'PIL',
         'ttkbootstrap': 'ttkbootstrap',
         'python-vlc': 'vlc',
-        # 'pygame': 'pygame',
-        'requests': 'requests'
     }
 
     for package_name, import_name in dependencies.items():
@@ -79,216 +106,10 @@ def check_dependencies():
     return True
 
 
-def create_inno_setup_script(build_folder):
-    """Inno Setup 스크립트(.iss)를 생성합니다."""
-    iss_content = f'''
-[Setup]
-AppName=VideoPlayer
-AppVersion=1.0
-AppPublisher=RSREHAB co., ltd.
-AppPublisherURL=https://rsrehab.com/
-DefaultDirName={{autopf}}\\VideoPlayer
-DefaultGroupName=VideoPlayer
-LicenseFile=EULA.txt
-AllowNoIcons=yes
-OutputDir=.\\installer
-OutputBaseFilename=VideoPlayer_Setup
-Compression=lzma
-SolidCompression=yes
-SetupIconFile=rslogo.ico
-UninstallDisplayIcon={{app}}\\비디오플레이어.exe
-WizardStyle=modern
-LanguageDetectionMethod=locale
-ShowLanguageDialog=no
-
-[Languages]
-Name: "korean"; MessagesFile: "compiler:Languages\\Korean.isl"
-
-[Tasks]
-Name: "desktopicon"; Description: "바탕화면 바로가기 생성"; GroupDescription: "추가 아이콘:"
-Name: "quicklaunchicon"; Description: "빠른 실행 바로가기 생성"; GroupDescription: "추가 아이콘:"
-
-[Files]
-Source: "{build_folder}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "EULA.txt"; DestDir: "{{app}}"
-Source: "INSTALL.md"; DestDir: "{{app}}"; Flags: ignoreversion
-
-[Icons]
-Name: "{{group}}\\VideoPlayer"; Filename: "{{app}}\\비디오플레이어.exe"
-Name: "{{group}}\\설치 가이드"; Filename: "{{app}}\\INSTALL.md"
-Name: "{{group}}\\{{cm:UninstallProgram,VideoPlayer}}"; Filename: "{{uninstallexe}}"
-Name: "{{autodesktop}}\\VideoPlayer"; Filename: "{{app}}\\비디오플레이어.exe"; Tasks: desktopicon
-Name: "{{userappdata}}\\Microsoft\\Internet Explorer\\Quick Launch\\VideoPlayer"; Filename: "{{app}}\\비디오플레이어.exe"; Tasks: quicklaunchicon
-
-[Code]
-function CheckFFmpegInstallation: Boolean;
-var
-  FFmpegPath: String;
-  PathEnv: String;
-  PathList: TStringList;
-  I: Integer;
-begin
-  Result := False;
-  
-  // PATH 환경변수에서 FFmpeg 확인
-  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', 'Path', PathEnv) then
-  begin
-    PathList := TStringList.Create;
-    try
-      PathList.Delimiter := ';';
-      PathList.DelimitedText := PathEnv;
-      
-      for I := 0 to PathList.Count - 1 do
-      begin
-        FFmpegPath := PathList[I] + '\\ffmpeg.exe';
-        if FileExists(FFmpegPath) then
-        begin
-          Result := True;
-          Break;
-        end;
-      end;
-    finally
-      PathList.Free;
-    end;
-  end;
-  
-  // 일반적인 설치 경로들도 확인
-  if not Result then
-  begin
-    Result := FileExists('C:\\ffmpeg\\bin\\ffmpeg.exe') or
-              FileExists(ExpandConstant('{{pf}}\\ffmpeg\\bin\\ffmpeg.exe')) or
-              FileExists(ExpandConstant('{{pf32}}\\ffmpeg\\bin\\ffmpeg.exe'));
-  end;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ResultCode: Integer;
-  FFmpegInstalled: Boolean;
-begin
-  if CurStep = ssPostInstall then
-  begin
-    FFmpegInstalled := CheckFFmpegInstallation;
-    
-    if not FFmpegInstalled then
-    begin
-      if MsgBox('비디오플레이어 설치 완료!' + #13#10#13#10 +
-                '✅ VLC 미디어 라이브러리가 내장되어 비디오 재생이 바로 가능합니다.' + #13#10#13#10 +
-                '⚠️  추가 기능을 위해 FFmpeg 설치를 권장합니다:' + #13#10 +
-                '   • 비디오 구간 추출' + #13#10 +
-                '   • 오디오 추출' + #13#10 +
-                '   • 이미지 프레임 추출' + #13#10#13#10 +
-                '지금 FFmpeg 다운로드 페이지를 열까요?', 
-                mbConfirmation, MB_YESNO) = IDYES then
-      begin
-        ShellExec('open', 'https://ffmpeg.org/download.html', '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
-      end;
-      
-      MsgBox('설치 완료! 🎉' + #13#10#13#10 + 
-             '✅ 비디오 재생: 즉시 사용 가능' + #13#10 +
-             '⏳ 추출 기능: FFmpeg 설치 후 사용 가능' + #13#10#13#10 +
-             '자세한 설치 가이드는 시작 메뉴 > VideoPlayer > 설치 가이드를 참고하세요.', 
-             mbInformation, MB_OK);
-    end else
-    begin
-      MsgBox('🎉 설치 완료!' + #13#10#13#10 + 
-             '✅ VLC 미디어 라이브러리: 내장됨' + #13#10 +
-             '✅ FFmpeg: 설치됨' + #13#10#13#10 +
-             '모든 기능을 바로 사용할 수 있습니다!', 
-             mbInformation, MB_OK);
-    end;
-  end;
-end;
-
-[Run]
-Filename: "{{app}}\\비디오플레이어.exe"; Description: "프로그램 실행"; Flags: nowait postinstall skipifsilent
-'''
-
-    iss_file = 'video_player_installer.iss'
-    with open(iss_file, 'w', encoding='utf-8-sig') as f:  # BOM 포함하여 저장
-        f.write(iss_content)
-
-    print(f"Inno Setup 스크립트 생성됨: {iss_file}")
-    print("인스톨러 생성 방법:")
-    print("1. Inno Setup을 설치하세요: https://jrsoftware.org/isinfo.php")
-    print(f"2. Inno Setup에서 {iss_file}를 열고 컴파일하세요")
-    print("3. installer 폴더에 설치파일이 생성됩니다")
-
-
-def compile_inno_setup():
-    """Inno Setup 컴파일러를 실행합니다."""
-    iss_file = 'video_player_installer.iss'
-
-    # 일반적인 Inno Setup 컴파일러 경로들
-    compiler_paths = [
-        r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-        r"C:\Program Files\Inno Setup 6\ISCC.exe",
-        r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
-        r"C:\Program Files\Inno Setup 5\ISCC.exe",
-    ]
-
-    compiler_path = None
-    for path in compiler_paths:
-        if os.path.exists(path):
-            compiler_path = path
-            break
-
-    if not compiler_path:
-        print("⚠️ Inno Setup 컴파일러를 찾을 수 없습니다.")
-        print("수동으로 설치파일을 생성해주세요.")
-        return False
-
-    try:
-        print(f"🔨 Inno Setup 컴파일 시작: {iss_file}")
-
-        # 인코딩 문제 해결을 위해 여러 방법 시도
-        encodings = ['utf-8', 'cp949', 'euc-kr']
-
-        for encoding in encodings:
-            try:
-                result = subprocess.run(
-                    [compiler_path, iss_file],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    encoding=encoding,
-                    errors='ignore'  # 인코딩 오류 무시
-                )
-                print("인스톨러 컴파일 성공!")
-                print("installer 폴더를 확인하세요")
-
-                # 성공한 경우 출력 표시
-                if result.stdout:
-                    print(f"컴파일 출력 (인코딩: {encoding}):")
-                    print(result.stdout)
-
-                return True
-
-            except UnicodeDecodeError:
-                print(f"인코딩 {encoding} 실패, 다음 인코딩 시도...")
-                continue
-            except subprocess.CalledProcessError as e:
-                print(f"인스톨러 컴파일 실패 (인코딩: {encoding}): {e}")
-                if e.stderr:
-                    print("에러 메시지:")
-                    print(e.stderr)
-                return False
-
-        print("모든 인코딩 시도 실패")
-        return False
-
-    except Exception as e:
-        print(f"인스톨러 컴파일 중 예외 발생: {e}")
-        return False
-
-
 def create_spec_file():
-    """PyInstaller spec 파일을 생성합니다."""
-
-    # VLC 번들링 도구 제거: 단순 spec 기반 빌드로 전환
-
-    # ttkbootstrap 테마 경로 동적 찾기
+    """PyInstaller spec 파일을 생성합니다. - 옵션 2에서만 실행"""
     try:
+        # ttkbootstrap 테마 경로 동적 찾기
         import ttkbootstrap
         import os
         ttkbootstrap_path = os.path.dirname(ttkbootstrap.__file__)
@@ -316,129 +137,144 @@ def create_spec_file():
     # 아이콘 설정 생성
     icon_setting = f'r"{icon_path}"' if icon_path else 'None'
 
-    # VLC 바이너리와 데이터는 simple spec에서 직접 정의
-    vlc_binaries = []
-    vlc_data = []
+    # VLC 경로 찾기
+    vlc_path = get_vlc_path()
+    if not vlc_path:
+        print("⚠️ VLC를 찾을 수 없습니다.")
+        return False
 
-    # 바이너리 섹션 생성
-    binaries_section = ""
-    if vlc_binaries:
-        binaries_list = [f"(r'{src}', r'{dst}')" for src, dst in vlc_binaries]
-        binaries_section = ",\n        ".join(binaries_list) + ","
+    # VLC 바이너리와 데이터 경로 설정
+    binaries_section = f"""(r'{vlc_path}\\libvlc.dll', '.'),
+        (r'{vlc_path}\\libvlccore.dll', '.')"""
 
-    # VLC 데이터를 datas_section에 추가
-    if vlc_data:
-        vlc_data_list = [f"(r'{src}', r'{dst}')" for src, dst in vlc_data]
-        vlc_data_section = ",\n        " + ",\n        ".join(vlc_data_list)
-        datas_section += vlc_data_section
+    # VLC 데이터 경로 추가
+    datas_section += f""",
+        (r'{vlc_path}\\plugins', 'plugins')"""
 
-    spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+    spec_content = textwrap.dedent(f"""\
+        # -*- mode: python ; coding: utf-8 -*-
 
-block_cipher = None
+        block_cipher = None
 
-a = Analysis(
-    ['main.py'],
-    pathex=[],
-    binaries=[
-        {binaries_section}
-    ],
-    datas=[
-        {datas_section}
-    ],
-    hiddenimports=[
-        'ttkbootstrap.themes',
-        'ttkbootstrap.themes.standard',
-        'vlc',
-        # VLC 관련 추가 모듈들
-        'vlc.generated.vlc_structures',
-        'vlc.generated.libvlc_structures', 
-        'ctypes.wintypes',
-        'ctypes.util',
-        'cv2',
-        'numpy',
-        'PIL._tkinter_finder',
-        'app',
-        'ui_components',
-        'ui_components.main_tab',
-        'ui_components.new_tab',
-        'ui_components.base_tab',
-        'ui_components.segment_table',
-        'ui_components.command_handlers',
-        'ui_components.preview_window',
-        'utils',
-        'utils.utils',
-        'utils.styles',
-        'utils.ui_utils',
-        'utils.event_system',
-        'utils.extract_manager',
-        'utils.ffmpeg_manager',
-        'utils.vlc_utils',
-        'utils.extract.video_extractor',
-        'utils.extract.audio_extractor',
-        'utils.extract.image_extractor',
-        'utils.image_utils',
-    ],
-    hookspath=[],
-    hooksconfig={{}},
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
+        a = Analysis(
+            ['main.py'],
+            pathex=[],
+            binaries=[
+                {binaries_section}
+            ],
+            datas=[
+                {datas_section}
+            ],
+            hiddenimports=[
+                'ttkbootstrap.themes',
+                'ttkbootstrap.themes.standard',
+                'vlc',
+                'ctypes.wintypes',
+                'ctypes.util',
+                'cv2',
+                'numpy',
+                'PIL._tkinter_finder',
+                'app',
+                'ui_components',
+                'ui_components.main_tab',
+                'ui_components.new_tab',
+                'ui_components.base_tab',
+                'ui_components.segment_table',
+                'ui_components.command_handlers',
+                'ui_components.preview_window',
+                'utils',
+                'utils.utils',
+                'utils.styles',
+                'utils.ui_utils',
+                'utils.event_system',
+            ],
+            hookspath=[],
+            hooksconfig={{}},
+            runtime_hooks=[],
+            excludes=[],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=block_cipher,
+            noarchive=False,
+        )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='비디오플레이어',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,  # GUI 앱이므로 콘솔 창을 숨김
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon={icon_setting},
-)
-'''
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='videoplayer',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=False,
+            disable_windowed_traceback=False,
+            argv_emulation=False,
+            target_arch=None,
+            codesign_identity=None,
+            entitlements_file=None,
+            icon={icon_setting},
+        )
+
+        ## 아래는 -onedir 일때 추가 코드
+        coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name='videoplayer'
+        )
+        """)
 
     with open('video_player.spec', 'w', encoding='utf-8') as f:
         f.write(spec_content)
 
     print("✓ video_player.spec 파일 생성됨")
-    if icon_path:
-        print(f"아이콘 파일 포함: {icon_path}")
-    else:
-        print("ℹ️ 아이콘 파일 없음")
+    return True
 
 
 def build_executable():
-    """실행파일을 빌드합니다."""
+    """실행파일을 빌드합니다. - 기본 빌드 (옵션1 권장)"""
+    # 공용 정리 루틴 실행
+    clean_build_files()
     print("\n🔨 실행파일 빌드 시작...")
 
-    # PyInstaller 명령 실행
+    # VLC 경로 찾기
+    vlc_path = get_vlc_path()
+    if not vlc_path:
+        print("⚠️ VLC를 찾을 수 없습니다. VLC가 설치되어 있는지 확인하세요.")
+        return False
+
+    print(f"✓ VLC 경로: {vlc_path}")
+
+    # PyInstaller 명령 구성
     cmd = [
         sys.executable, '-m', 'PyInstaller',
         '--clean',
+        '--noconfirm',
         '--onedir',  # 폴더 구조로 생성
         '--windowed',
-        '--name', '비디오플레이어',
+        '--name', 'videoplayer',  # 영문 이름 사용
+        # VLC 파일 추가 (모든 DLL을 루트에 복사)
+        '--add-binary', f'{vlc_path}\\libvlc.dll;.',
+        '--add-binary', f'{vlc_path}\\libvlccore.dll;.',
+        '--add-data', f'{vlc_path}\\plugins;plugins',
+        # 프로젝트 파일 추가
         '--add-data', 'ui_components;ui_components',
         '--add-data', 'utils;utils',
         '--add-data', 'EULA.txt;.',
         '--add-data', 'app.py;.',
+        # 필요한 모듈 import
         '--hidden-import', 'ttkbootstrap.themes',
         '--hidden-import', 'ttkbootstrap.themes.standard',
         '--hidden-import', 'vlc',
@@ -479,35 +315,24 @@ def build_executable():
             encoding='utf-8', errors='ignore')
         print("✓ 빌드 성공!")
 
-        # --onedir의 경우 폴더 구조로 생성됨
+        # --onedir의 경우 dist 폴더에 산출
         dist_folder = os.path.join('dist', 'videoplayer')
-        build_folder = os.path.join('build', 'videoplayer')
-        exe_file = os.path.join(build_folder, 'videoplayer.exe')
+        exe_file = os.path.join(dist_folder, 'videoplayer.exe')
 
-        # dist 폴더를 build 폴더로 복사 (Inno Setup 준비)
         if os.path.exists(dist_folder):
-            if os.path.exists('build'):
-                shutil.rmtree('build')
-            os.makedirs('build', exist_ok=True)
-            shutil.copytree(dist_folder, build_folder)
-            print(f"📁 Inno Setup용 빌드 폴더 생성: {build_folder}")
-
             if os.path.exists(exe_file):
-                print(f"📁 실행파일 폴더: {build_folder}")
+                print(f"📁 실행파일 폴더: {dist_folder}")
                 print(f"🗂️  실행파일: {exe_file}")
 
                 # 폴더 크기 계산
                 folder_size = sum(
                     os.path.getsize(os.path.join(dirpath, filename))
-                    for dirpath, dirnames, filenames in os.walk(build_folder)
+                    for dirpath, dirnames, filenames in os.walk(dist_folder)
                     for filename in filenames
                 ) / (1024*1024)  # MB
                 print(f"📊 전체 크기: {folder_size:.1f} MB")
-
-                # Inno Setup 스크립트 생성
-                create_inno_setup_script(build_folder)
             else:
-                print("⚠️  실행파일을 찾을 수 없습니다.")
+                print("⚠️ 실행파일을 찾을 수 없습니다.")
 
         # 빌드 로그 출력
         if result.stdout:
@@ -524,68 +349,15 @@ def build_executable():
     return True
 
 
-def build_with_spec():
-    """spec 파일을 사용하여 빌드합니다."""
-    print("\n🔨 spec 파일로 빌드 시작...")
-
-    # simple spec가 있으면 우선 사용, 없으면 기존 spec 사용
-    preferred_spec = 'simple_video_player_onedir.spec' if os.path.exists(
-        'simple_video_player_onedir.spec') else 'video_player.spec'
-    if preferred_spec == 'simple_video_player_onedir.spec':
-        print("✓ simple_video_player_onedir.spec 파일 감지됨 – 해당 파일로 빌드합니다")
-    else:
-        print("ℹ️ simple_video_player_onedir.spec 없음 – video_player.spec로 빌드합니다")
-
-    cmd = [sys.executable, '-m', 'PyInstaller', preferred_spec]
-
-    try:
-        result = subprocess.run(
-            cmd, check=True, capture_output=True, text=True,
-            encoding='utf-8', errors='ignore')
-        print("✓ spec 파일 빌드 성공!")
-
-        # 결과 파일 확인 (spec 종류에 따라 경로가 다름)
-        if preferred_spec == 'simple_video_player.spec':
-            # one-file exe로 생성됨
-            exe_path = os.path.join('dist', 'videoplayer.exe')
-            if os.path.exists(exe_path):
-                print(f"🗂️  실행파일: {exe_path}")
-                print("📊 출력 유형: one-file EXE")
-        else:
-            # video_player.spec은 onedir로 생성됨
-            exe_folder = os.path.join('dist', '비디오플레이어')
-            exe_file = os.path.join(exe_folder, '비디오플레이어.exe')
-            if os.path.exists(exe_file):
-                print(f"📁 실행파일 폴더: {exe_folder}")
-                print(f"🗂️  실행파일: {exe_file}")
-
-                # 폴더 크기 계산
-                folder_size = sum(
-                    os.path.getsize(os.path.join(dirpath, filename))
-                    for dirpath, dirnames, filenames in os.walk(exe_folder)
-                    for filename in filenames
-                ) / (1024*1024)  # MB
-                print(f"📊 전체 크기: {folder_size:.1f} MB")
-
-    except subprocess.CalledProcessError as e:
-        print(f"❌ 빌드 실패: {e}")
-        if e.stderr:
-            print("에러 메시지:")
-            print(e.stderr)
-        return False
-
-    return True
-
-
 def main():
     """메인 함수"""
-    print("🚀 비디오 플레이어 실행파일 빌드 시작")
+    print("✓ 비디오 플레이어 실행파일 빌드 시작")
     print("=" * 50)
 
     # 1. 의존성 확인
     print("\n1. 의존성 확인...")
     if not check_dependencies():
-        print("❌ 의존성 확인 실패. 필요한 패키지를 설치하세요.")
+        print("의존성 확인 실패. 필요한 패키지를 설치하세요.")
         sys.exit(1)
 
     # 2. 기존 빌드 파일 정리
@@ -595,29 +367,28 @@ def main():
     # 3. 빌드 방법 선택
     print("\n3. 빌드 방법 선택...")
     print("1) 기본 빌드 (권장)")
-    print("2) spec 파일 생성 후 빌드")
-    print("3) 빌드 후 Inno Setup 인스톨러 자동 생성")
+    print("2) spec 파일 생성만 (수동 빌드용)")
 
-    choice = input("선택하세요 (1, 2, 3, 기본값: 1): ").strip() or '1'
+    choice = input("선택하세요 (1, 2, 기본값: 1): ").strip() or '1'
 
     if choice == '2':
-        # simple spec이 있으면 생성 생략하고 바로 빌드
-        if os.path.exists('simple_video_player_onedir.spec'):
-            print("\n✓ 기존 simple_video_player_onedir.spec을 사용하여 빌드합니다 (spec 생성 생략)")
-            success = build_with_spec()
-        else:
-            # simple spec이 없으면 기존 로직대로 spec 생성 (video_player.spec) 후 빌드
-            create_spec_file()
-            success = build_with_spec()
-    elif choice == '3':
-        # 빌드 후 인스톨러 자동 생성
-        success = build_executable()
-        if success:
-            print("\n🔧 Inno Setup 인스톨러 자동 생성 시도...")
-            compile_inno_setup()
+        print("\n🔨 spec 파일 생성...")
+        success = create_spec_file()
+        if not success:
+            print("\n⚠️ spec 파일 생성 실패")
+            return
+        print("\n➡ 다음 명령으로 수동 빌드를 실행하세요:")
+        print("   python -m PyInstaller video_player.spec")
+        print("\n출력 위치:")
+        print("   dist/videoplayer/videoplayer.exe")
     else:
-        # 기본 빌드
+        # 기본 빌드 (1번 옵션 - 권장)
         success = build_executable()
+        if not success:
+            print("\n⚠️ 빌드 실패")
+            print("1. VLC가 설치되어 있는지 확인하세요")
+            print("2. 필요한 Python 패키지가 모두 설치되어 있는지 확인하세요")
+            return
 
     if success:
         print("\n🎉 빌드 완료!")
@@ -625,13 +396,9 @@ def main():
 
         # 실행 방법 안내
         print("\n📋 실행 방법:")
-        print("1. build/비디오플레이어 폴더의 비디오플레이어.exe를 더블클릭")
-        print("2. 또는 명령창에서: ./build/비디오플레이어/비디오플레이어.exe")
-        print("📦 배포 시: build/비디오플레이어 폴더 전체를 복사하여 배포하세요")
-
-        if os.path.exists('video_player_installer.iss'):
-            print("\n🔧 Inno Setup 인스톨러:")
-            print("- video_player_installer.iss 파일로 Windows 인스톨러를 생성할 수 있습니다")
+        print("1. dist/videoplayer 폴더의 videoplayer.exe를 더블클릭")
+        print("2. 또는 명령창에서: ./dist/videoplayer/videoplayer.exe")
+        print("📦 배포 시: dist/videoplayer 폴더 전체를 복사하여 배포하세요")
 
     else:
         print("\n❌ 빌드 실패")

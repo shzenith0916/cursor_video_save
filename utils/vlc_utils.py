@@ -23,11 +23,24 @@ def setup_bundled_vlc():
 
         print(f"VLC 환경 설정 시작, base_path: {base_path}")
 
-        # VLC 루트 경로 설정 (base_path가 이미 _internal을 포함하므로 vlc만 추가)
-        vlc_root = os.path.join(base_path, 'vlc')
-        if not os.path.exists(vlc_root):
-            print(f"⚠️ VLC 루트 경로를 찾을 수 없음: {vlc_root}")
-            return False
+        # VLC 루트 경로는 실행 파일과 같은 위치
+        vlc_root = base_path
+        print(f"✓ VLC 루트 경로: {vlc_root}")
+
+        # 필수 DLL 체크
+        required_dlls = ['libvlc.dll', 'libvlccore.dll',
+                         'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll']
+        for dll in required_dlls:
+            dll_path = os.path.join(vlc_root, dll)
+            if not os.path.exists(dll_path):
+                print(f"⚠️ 필수 DLL을 찾을 수 없음: {dll}")
+                return False
+            try:
+                ctypes.CDLL(dll_path)
+                print(f"✓ DLL 로드 성공: {dll}")
+            except Exception as e:
+                print(f"⚠️ DLL 로드 실패: {dll} - {e}")
+                return False
 
         # VLC 플러그인 경로 설정
         plugins_path = os.path.join(vlc_root, 'plugins')
@@ -58,8 +71,6 @@ def setup_bundled_vlc():
             os.environ['PATH'] = vlc_root + os.pathsep + current_path
             print(f"✓ PATH에 추가: {vlc_root}")
 
-        return True
-
     except Exception as e:
         print(f"번들된 VLC 설정 오류: {e}")
         return False
@@ -71,31 +82,19 @@ class VLCPlayer:
     """VLC 플레이어"""
 
     def __init__(self):
-        # VLC 인스턴스 생성 (임베딩을 위한 옵션)
-        vlc_args = [
-            '--quiet',
-            '--no-video-title-show',
-            '--no-video-deco',  # 비디오 장식 제거
-            '--intf=dummy',  # 인터페이스 비활성화
-        ]
-
-        # 플러그인 경로가 설정되어 있으면 추가
-        plugin_path = os.environ.get('VLC_PLUGIN_PATH')
-        if plugin_path:
-            print(f"VLC 인스턴스 생성: 플러그인 경로 추가 - {plugin_path}")
-            vlc_args.extend(['--plugin-path', plugin_path])
-
         try:
-            print(f"VLC 인스턴스 생성 시도: {vlc_args}")
-            self.vlc_instance = vlc.Instance(vlc_args)
+            # VLC 인스턴스 생성 (옵션 없이)
+            self.vlc_instance = vlc.Instance()
             if not self.vlc_instance:
                 raise Exception("VLC 인스턴스가 None을 반환")
+
+            print("VLC 인스턴스 생성 성공")
 
             self.media_player = self.vlc_instance.media_player_new()
             if not self.media_player:
                 raise Exception("VLC 미디어 플레이어가 None을 반환")
 
-            print("VLC 인스턴스 및 미디어 플레이어 생성 성공")
+            print("VLC 미디어 플레이어 생성 성공")
         except Exception as e:
             print(f"VLC 초기화 실패: {e}")
             self.vlc_instance = None
