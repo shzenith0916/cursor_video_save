@@ -123,6 +123,11 @@ class VLCPlayer:
         if self.media:
             print("미디어가 로드되어 있음, 즉시 임베딩 시도")
             self.embed_video()
+
+            # 미디어 정보 로드를 위해 잠시 재생 후 정지
+            self.media_player.play()
+            time.sleep(0.05)  # 미디어 정보가 로드될 때까지 대기
+            self.media_player.pause()
         else:
             print("미디어가 아직 로드되지 않음, 나중에 임베딩됨")
 
@@ -165,7 +170,12 @@ class VLCPlayer:
                 print(f"VLC 로드: 비디오 위젯 발견, 임베딩 시도")
                 self.embed_video()
                 # 임베딩 후 최소한의 지연만 (0.2초 → 0.05초)
-                time.sleep(0.05)
+                # time.sleep(0.05)
+
+                # 미디어 정보 로드를 위해 잠시 재생 후 정지
+                self.media_player.play()
+                time.sleep(0.05)  # 미디어 정보가 로드될 때까지 대기
+                self.media_player.pause()
             else:
                 print(f"VLC 로드: 비디오 위젯이 설정되지 않음")
 
