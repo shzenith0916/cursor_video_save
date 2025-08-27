@@ -365,9 +365,6 @@ class MainTab(BaseTab):
             self._video_info_updated = True
             print("MainTab: 비디오 로드 완료 - 플레이어 상태 이벤트 발생")
 
-            # 비디오 로드 성공 메시지 표시
-            self._show_video_load_success_message()
-
             event_system.emit(Events.PLAYER_STATE_CHANGED,
                               is_playing=False, is_stopped=True)
         else:
@@ -393,19 +390,6 @@ class MainTab(BaseTab):
                     info_text += f"동영상 길이: {VideoUtils.format_time(int(self.app.vlc_player.duration))}"
 
             self.video_info_label.config(text=info_text)
-
-    def _show_video_load_success_message(self):
-        """비디오 로드 성공 메시지박스 표시"""
-
-        video_name = os.path.basename(self.app.video_path) if hasattr(
-            self.app, 'video_path') else "비디오"
-        duration_str = VideoUtils.format_time(int(self.app.vlc_player.duration)) if hasattr(
-            self.app, 'vlc_player') and self.app.vlc_player.duration > 0 else "알 수 없음"
-
-        messagebox.showinfo("비디오 로드 성공",
-                            f"비디오가 성공적으로 로드되었습니다!\n\n"
-                            f"파일명: {video_name}\n"
-                            f"재생시간: {duration_str}")
 
     def _update_slider(self):
         """슬라이더 상태 업데이트"""
