@@ -10,6 +10,7 @@ from utils.ui_utils import UiUtils
 from .base_tab import BaseTab
 from utils.utils import VideoUtils
 from utils.styles import AppStyles
+from utils.vlc_utils import VLCPlayer
 from utils.event_system import event_system, Events
 
 
@@ -247,7 +248,7 @@ class MainTab(BaseTab):
             # 슬라이더 값으로 시간 계산 (직접 시간 값 사용)
             current_time = self.progress_variable.get()
 
-            # 시간 표시 업데이트
+            # 시간 표시 업데이트 (UI만 업데이트, VLC는 건드리지 않음)
             time_str = VideoUtils.format_time(int(current_time))
             total_time = VideoUtils.format_time(
                 int(self.app.vlc_player.duration))
@@ -257,12 +258,29 @@ class MainTab(BaseTab):
         """슬라이더 놓을 시 - 실제 비디오 위치 동기화 - VLC 기반"""
         if self.is_slider_dragging and hasattr(self.app, 'vlc_player') and self.app.vlc_player.duration > 0:
             # 슬라이더 값으로 시간 계산 (직접 시간 값 사용)
-            target_time = self.progress_variable.get()
+            current_time = self.progress_variable.get()
+            print(f"DEBUG: 슬라이더 릴리즈 - 슬라이더 값: {current_time}초")
 
             # VLC 플레이어 위치 설정
             if hasattr(self.app, 'vlc_player') and self.app.vlc_player:
-                self.app.select_position(target_time)
-                print(f"MainTab: 슬라이더로 위치 변경 - {target_time}초")
+                # 직접 VLC 플레이어의 set_position 호출 (중간 단계 제거)
+                self.app.vlc_player.set_position(current_time)
+                print(f"DEBUG: VLC 위치 설정 완료 - 설정한 시간: {current_time}초")
+
+                # VLC의 실제 위치 확인
+                actual_time = self.app.vlc_player.get_position()
+                print(f"DEBUG: VLC 실제 위치: {actual_time}초")
+                print(
+                    f"DEBUG: 설정값과 실제값 차이: {abs(current_time - actual_time)}초")
+
+            # 시간 표시 업데이트
+            time_str = VideoUtils.format_time(int(current_time))
+            total_time = VideoUtils.format_time(
+                int(self.app.vlc_player.duration))
+            # 슬라이더 레이블에 업데이트를 해줘야 UI에 반영됨!!!!!!
+            self.root.after(0, lambda: self.slider_label.config(
+                text=f"{time_str} / {total_time}"))
+
             # 드래그 상태 해제
             self.is_slider_dragging = False
 
@@ -335,22 +353,42 @@ class MainTab(BaseTab):
 
     def on_set_start_click(self):
         """시작 지점 설정 버튼 클릭 시"""
-        # VLC 플레이어의 실제 재생 시간을 구간 시작 시간으로 사용
-        if hasattr(self.app, 'vlc_player') and self.app.vlc_player:
+        # 슬라이더의 현재 위치를 우선적으로 사용
+        if hasattr(self, 'progress_variable'):
+            current_time = self.progress_variable.get()
+            print(f"DEBUG: 슬라이더에서 가져온 시작 시간: {current_time}초")
+        elif hasattr(self.app, 'vlc_player') and self.app.vlc_player:
+            # 슬라이더가 없으면 VLC 플레이어의 시간 사용
             current_time = self.app.vlc_player.get_position()
+            print(f"DEBUG: VLC 플레이어에서 가져온 시작 시간: {current_time}초")
         else:
-            # VLC 플레이어가 없으면 슬라이더 위치 사용
-            current_time = self.app.position_slider.get()
+            current_time = 0
+            print(f"DEBUG: 기본값으로 시작 시간 설정: {current_time}초")
+
+        print(f"DEBUG: 구간 시작 시간으로 설정할 값: {current_time}초")
         event_system.emit(Events.SEGMENT_START_SET, time=current_time)
 
     def on_set_end_click(self):
         """종료 지점 설정 버튼 클릭 시"""
-        # VLC 플레이어의 실제 재생 시간을 구간 종료 시간으로 사용
-        if hasattr(self.app, 'vlc_player') and self.app.vlc_player:
+        # 슬라이더의 현재 위치를 우선적으로 사용
+        if hasattr(self, 'progress_variable'):
+            current_time = self.progress_variable.get()
+            print(f"DEBUG: 슬라이더에서 가져온 종료 시간: {current_time}초")
+        elif hasattr(self.app, 'vlc_player') and self.app.vlc_player:
+            # 슬라이더가 없으면 VLC 플레이어의 시간 사용
             current_time = self.app.vlc_player.get_position()
+            print(f"DEBUG: VLC 플레이어에서 가져온 종료 시간: {current_time}초")
         else:
-            # VLC 플레이어가 없으면 슬라이더 위치 사용
-            current_time = self.app.position_slider.get()
+            current_time = 0
+            print(f"DEBUG: 기본값으로 종료 시간 설정: {current_time}초")
+
+        # VLC 플레이어의 실제 시간도 확인
+        if hasattr(self.app, 'vlc_player') and self.app.vlc_player:
+            vlc_time = self.app.vlc_player.get_position()
+            print(f"DEBUG: VLC 플레이어 실제 시간: {vlc_time}초")
+            print(f"DEBUG: 슬라이더와 VLC 시간 차이: {abs(current_time - vlc_time)}초")
+
+        print(f"DEBUG: 구간 종료 시간으로 설정할 값: {current_time}초")
         event_system.emit(Events.SEGMENT_END_SET, time=current_time)
 
     # create_save_button 및 create_preview_button 통합

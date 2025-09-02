@@ -151,6 +151,16 @@ class SegmentTable:
         )
         export_button.pack(side=ttk.LEFT, padx=8, pady=2)
 
+        # CSV 업로드 버튼 추가
+        import_button = ttk.Button(
+            button_frame,
+            text="CSV에서 가져오기",
+            command=self.import_from_csv,
+            style="Large.primary.TButton",
+            width=20
+        )
+        import_button.pack(side=ttk.LEFT, padx=8, pady=2)
+
         # 초기 데이터 로드
         self.load_table_data()
 
@@ -356,6 +366,35 @@ class SegmentTable:
             messagebox.showinfo("성공", message)
         else:
             messagebox.showwarning("경고", message)
+
+    def import_from_csv(self):
+        """CSV에서 구간 데이터 가져오기"""
+        try:
+            print("CSV파일 가져오기 시작")
+            file_path = filedialog.askopenfilename(
+                title='CSV 파일 선택',
+                filetypes=[
+                    ('CSV Files', '*.csv'),
+                    ('ALL Files', "*.*")
+                ]
+            )
+            print(f"선택된 CSV 파일 경로: {file_path}")
+
+            if not file_path:
+                return
+
+            # App 클래스의 중앙화된 데이터 관리 메서드 호출
+            success, message = self.app.import_segments_from_csv(file_path)
+
+            if success:
+                messagebox.showinfo("성공", message)
+                # 테이블 새로고침
+                self.refresh()
+            else:
+                messagebox.showerror("오류", message)
+
+        except Exception as e:
+            messagebox.showerror("오류", f"CSV 가져오기 중 오류가 발생했습니다: {str(e)}")
 
     # generate_csv_filename 메서드는 App 클래스로 이동됨 - 중앙화된 데이터 관리
 

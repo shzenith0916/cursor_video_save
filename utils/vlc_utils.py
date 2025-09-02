@@ -334,19 +334,38 @@ class VLCPlayer:
             print("미디어 플레이어 또는 미디어가 없습니다.")
 
     def set_position(self, position):
-        """위치 설정 (초 단위)"""
+        """위치 설정 (초 단위) - 정밀도 향상"""
         if self.media_player and self.duration > 0:
-            vlc_position = max(0.0, min(1.0, position / self.duration))
-            self.media_player.set_position(vlc_position)
+            # 밀리초 단위로 직접 설정 (정밀도 향상)
+            target_time_ms = int(position * 1000)
+            self.media_player.set_time(target_time_ms)
+
+            # 내부 current_time 변수도 업데이트
+            self.current_time = position
+
             # 위치 변경 후에는 '일시정지' 상태가 되므로, UI 업데이트를 위해 이벤트를 발생시킵니다.
             self.is_playing = False
             event_system.emit(Events.PLAYER_STATE_CHANGED,
                               is_playing=False, is_stopped=False)
 
+            print(
+                f"DEBUG: VLC set_position - 설정한 시간: {position}초 ({target_time_ms}ms)")
+
     def get_position(self):
         """현재 위치 반환 (초 단위)"""
         if self.media_player:
-            return self.media_player.get_time() / 1000
+            # 내부 current_time 변수를 우선적으로 사용
+            if hasattr(self, 'current_time') and self.current_time is not None:
+                print(
+                    f"DEBUG: VLC get_position - 내부 current_time 사용: {self.current_time}초")
+                return self.current_time
+
+            # 내부 변수가 없으면 VLC에서 직접 가져오기
+            raw_time = self.media_player.get_time()
+            position = raw_time / 1000
+            print(
+                f"DEBUG: VLC get_position - raw_time: {raw_time}ms, position: {position}초")
+            return position
         return 0
 
     def get_duration(self):
@@ -434,6 +453,7 @@ class VLCPlayer:
         try:
             new_time = self.media_player.get_time() / 1000
             self.current_time = new_time
+            print(f"DEBUG: VLC 시간 변경 이벤트 - current_time 업데이트: {new_time}초")
             event_system.emit(Events.VLC_TIME_CHANGED, time=new_time)
         except Exception as e:
             print(f"시간 변경 이벤트 처리 실패: {e}")

@@ -9,7 +9,7 @@ import csv
 from datetime import datetime
 from utils.styles import AppStyles
 from utils.ui_utils import UiUtils
-from utils.utils import VideoUtils
+from utils.utils import VideoUtils, _parse_time_to_seconds
 from utils.vlc_utils import VLCPlayer
 from utils.event_system import event_system, Events
 from ui_components import create_tabs
@@ -235,17 +235,25 @@ class VideoEditorApp:
 
     def set_start_time(self, time: float):
         """시작 시간 지정 (이벤트 핸들러)"""
+        print(f"DEBUG: set_start_time 호출됨 - 받은 시간: {time}초")
         self.start_time = time
+        print(f"DEBUG: self.start_time 설정됨: {self.start_time}초")
         self.start_time_label.config(
             text=f"구간 시작: {VideoUtils.format_time(int(self.start_time))}")
+        print(
+            f"DEBUG: UI 라벨 업데이트됨: {VideoUtils.format_time(int(self.start_time))}")
         self.update_save_button_state()
 
     def set_end_time(self, time: float):
         """종료 시간 지정 (이벤트 핸들러)"""
+        print(f"DEBUG: set_end_time 호출됨 - 받은 시간: {time}초")
         self.end_time = time
+        print(f"DEBUG: self.end_time 설정됨: {self.end_time}초")
         self.end_time_label.config(
             text=f"구간 종료: {VideoUtils.format_time(int(self.end_time))}"
         )
+        print(
+            f"DEBUG: UI 라벨 업데이트됨: {VideoUtils.format_time(int(self.end_time))}")
         self.update_save_button_state()
 
     def update_save_button_state(self):
@@ -562,3 +570,142 @@ class VideoEditorApp:
             filename = f"{video_name}_구간데이터_{segment_count}개_{date_str}.csv"
 
         return filename
+
+    def import_segments_from_csv(self, file_path):
+        """CSV 파일에서 구간 데이터 가져오기 - app에서 중앙화된 데이터 관리리"""
+
+        try:
+            if not os.path.exists(file_path):
+                return False, "CSV 파일을 찾을 수 없습니다."
+
+            imported_segments = []
+            error_count = 0
+
+            # 여러 인코딩 시도
+            encodings = ['utf-8', 'cp949', 'euc-kr']
+            csvfile = None
+
+            for encod in encodings:
+                try:
+                    csvfile = open(file_path, 'r', encoding=encod)
+                    # 헤더를 자동으로 인식하여 딕셔너리 형태로 반환해줌.
+                    reader = csv.DictReader(csvfile)
+
+                    # DictReader는 자동으로 첫 번째 행을 헤더로 인식하므로 next() 불필요
+                    # 2부터 시작 (헤더 제외)
+                    for row_num, row in enumerate(reader, start=2):
+                        try:
+                            # DictReader는 딕셔너리 형태로 반환하므로 키로 접근
+                            if not row.get('파일명') or not row.get('시작 시간') or not row.get('종료 시간'):
+                                error_count += 1
+                                continue
+
+                            # 문자열로 들어가 있기 때문에 strip()으로 공백 제거
+                            start_time_str = row['시작 시간'].strip()
+                            end_time_str = row['종료 시간'].strip()
+
+                            # 시간 문자열을 초 단위로 변환 (HH:MM:SS 형식)
+                            start_seconds = _parse_time_to_seconds(
+                                start_time_str)
+                            end_seconds = _parse_time_to_seconds(
+                                end_time_str)
+
+                            if start_seconds is None or end_seconds is None:
+                                error_count += 1
+                                continue
+                            elif start_seconds >= end_seconds:
+                                error_count += 1
+                                continue
+
+                            # 구간 데이터 생성, app.py의 내부 데이터 구조는 400-410 라인 확인. UI테이블에서의 헤더더와 다름.
+                            segment_data = {
+                                'file': row['파일명'].strip(),
+                                'start': start_seconds,
+                                'end': end_seconds,
+                                'duration': end_seconds - start_seconds,
+                                # row.get을 이용해서 기본값 ''으로 안전한 처리, cvs 파일의 컬럼이 누락되어도 오류 없이 처리하기 위함
+                                'opinion1': row.get('의견1', '').strip(),
+                                'opinion2': row.get('의견2', '').strip()
+                            }
+
+                            imported_segments.append(segment_data)
+
+                        except Exception as e:
+                            error_count += 1
+                            print(f"CSV 행 {row_num} 처리 중 오류: {e}")
+                            continue
+
+                    # 성공적으로 읽었으면 루프 종료 (파일이 열린채로 있음. finally 블록에서 닫음.)
+                    break
+
+                except UnicodeDecodeError:
+                    # 현재 인코딩으로 실패하면 다음 인코딩 시도
+                    if csvfile:  # 파일이 열려있으면
+                        csvfile.close()  # 파일 닫기
+                    continue  # except 블록이 아닌 for 루프의 다음 반복으로 이동
+                except Exception as e:
+                    # 기타 오류는 즉시 중단
+                    if csvfile:
+                        csvfile.close()
+                    return False, f"CSV 파일 읽기 중 오류가 발생했습니다: {str(e)}"
+                finally:  # try 블록에서 예외가 발생하지 않고 정상적으로 break 하면 파일이 열린 상태로 빠져나감.
+                    if csvfile:  # 따라서 파일이 열려있다면, 메모리 누수를 방지하기 위해
+                        csvfile.close()  # 파일 닫기 실행.
+
+            if not imported_segments:
+                return False, "가져올 수 있는 구간 데이터가 없습니다."
+
+            # 파일명 일치성 확인
+            if not self._check_video_filename_match(imported_segments):
+                return False, "CSV 가져오기가 취소되었습니다."
+
+            # !!!!!!기존 구간에 추가!!!!!!
+            self.saved_segments.extend(imported_segments)
+
+            # 이벤트 발행 및 테이블 업데이트
+            event_system.emit(Events.SEGMENT_SAVED, segments=imported_segments)
+            self.update_all_tables()
+
+            success_msg = f"{len(imported_segments)}개의 구간을 성공적으로 가져왔습니다."
+            if error_count > 0:
+                success_msg += f"\n{error_count}개의 행에서 오류가 발생했습니다."
+
+            return True, success_msg
+
+        except Exception as e:
+            return False, f"CSV 파일 읽기 중 오류가 발생했습니다: {str(e)}"
+
+    def _check_video_filename_match(self, imported_segments):
+        """현재 비디오 파일과 CSV 파일의 일치성 확인"""
+        current_video_name = ""
+        if hasattr(self, 'video_path') and self.video_path:
+            if hasattr(self.video_path, 'get'):
+                video_path = self.video_path.get()
+            else:
+                video_path = self.video_path
+
+            if video_path:
+                current_video_name = os.path.splitext(
+                    os.path.basename(video_path))[0]
+
+        # CSV에서 가져온 첫 번째 구간의 파일명 확인
+        csv_video_name = ""
+        if imported_segments and imported_segments[0].get('file'):
+            csv_filename = imported_segments[0]['file']
+            csv_video_name = os.path.splitext(csv_filename)[0]
+
+        # 파일명 일치성 확인 및 사용자 알림
+        if current_video_name and csv_video_name:
+            if current_video_name != csv_video_name:
+                warning_msg = f"""⚠️ 파일명 불일치 경고
+
+현재 로드된 비디오: {current_video_name}
+CSV 파일의 비디오: {csv_video_name}
+
+다른 비디오 파일의 구간 데이터를 가져오려고 합니다.
+계속 진행하시겠습니까?"""
+
+                if not messagebox.askyesno("파일명 불일치", warning_msg):
+                    return False
+
+        return True

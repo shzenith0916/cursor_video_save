@@ -11,6 +11,31 @@ from .event_system import event_system, Events
 import time
 
 
+def _parse_time_to_seconds(time_str):
+    """시간 문자열을 초 단위로 변환 (HH:MM:SS 형식)"""
+    try:
+        if not time_str:
+            return None
+
+        # HH:MM:SS 형식 파싱
+        parts = time_str.split(':')
+        if len(parts) == 3:
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = int(parts[2])
+            return hours * 3600 + minutes * 60 + seconds
+        elif len(parts) == 2:
+            # MM:SS 형식도 지원
+            minutes = int(parts[0])
+            seconds = int(parts[1])
+            return minutes * 60 + seconds
+        else:
+            return None
+
+    except (ValueError, IndexError):
+        return None
+
+
 def show_custom_messagebox(parent, title, message, msg_type="info", auto_close_ms=None):
     """커스텀 Toplevel 메시지 박스 생성"""
     dialog = tk.Toplevel(parent)
@@ -236,64 +261,3 @@ class VideoUtils:
         if not os.path.exists(default_path):
             default_path = os.path.expanduser("~/Documents")
         return default_path
-
-    @staticmethod
-    def extract_audio_from_video(input_path, output_folder, start_time, end_time,
-                                 progress_callback=None, cancel_event=None,
-                                 audio_format='mp3', audio_quality='192k'):
-        """비디오에서 오디오 추출 (공통 메서드)"""
-        from utils.extract.audio_extractor import AudioExtractor as VideoExtractor
-
-        try:
-            # 오디오 파일명 생성
-            base_filename = os.path.splitext(os.path.basename(input_path))[0]
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            audio_filename = f"{base_filename}_{timestamp}.{audio_format}"
-            output_path = os.path.join(output_folder, audio_filename)
-
-            # 진행률 콜백 호출
-            if progress_callback:
-                progress_callback(50, 1, 1)  # 50% 진행률로 시작
-
-            # 취소 확인
-            if cancel_event and cancel_event.is_set():
-                return None
-
-            # VideoExtractor를 사용하여 오디오 추출
-            result = VideoExtractor.extract_audio_segment(
-                input_video_path=input_path,
-                output_audio_path=output_path,
-                start_time=start_time,
-                end_time=end_time,
-                progress_callback=lambda msg: progress_callback(
-                    75, 1, 1) if progress_callback else None,
-                audio_format=audio_format,
-                audio_quality=audio_quality
-            )
-
-            # 취소 확인
-            if cancel_event and cancel_event.is_set():
-                return None
-
-            if result['success']:
-                # 완료 시 진행률 업데이트
-                if progress_callback:
-                    progress_callback(100, 1, 1)
-
-                return {
-                    'extracted_count': 1,
-                    'total_frames': 1,
-                    'fps': 0,  # 오디오는 FPS가 없음
-                    'frame_skip': 0,
-                    'output_path': output_path,
-                    'audio_format': audio_format,
-                    'audio_quality': audio_quality
-                }
-            else:
-                raise Exception(result['message'])
-
-        except Exception as e:
-            raise Exception(f"오디오 추출 중 오류: {str(e)}")
-
-        finally:
-            pass
