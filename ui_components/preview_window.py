@@ -28,12 +28,21 @@ class PreviewWindow:
         self.end_time = end_time
         # 자동재생 기능 제거됨
 
+        # after_idle로 컨트롤러 초기화가 지연되므로, 창을 즉시 닫을때 vlc_player 속성이 아직 없어서 Attribute Error발생.선제적으로 속성 정의
+        self.vlc_player = None
+        self.is_playing = False
+
         # 초기화 메서드들 순서대로 호출
         self._init_window()
         self._init_video_properties()
-        self._init_video_controller()
+        # UI와 핸들러를 먼저 올리고, 무거운 VLC 초기화는 idle에 지연 실행
         self._init_ui()
         self._init_event_handlers()
+        # Tk 이벤트 루프가 “idle(대기) 상태”가 되었을 때 콜백을 한 번 실행.
+        # 다른 작업으로 인해 창이 멈추는 것을 방지하면서 특정 함수를 실행할 수 있으며,
+        # after() 메소드와 달리 즉시 실행될 필요가 없거나 이벤트 처리가 완료된 후에 실행해야 하는 작업에 유용
+        # 지금 처리 중인 이벤트/그림 그리기/레이아웃 갱신이 끝난 뒤 실행되므로, 창이 먼저 그려지고 닫기 버튼도 즉시 반응할 수 있음.
+        self.window.after_idle(self._initialize_vlc)
 
     # =================================================================
     # 초기화 및 설정 메서드들
@@ -52,29 +61,6 @@ class PreviewWindow:
         """비디오 속성 초기화 - VLC 기반"""
         # 현재 재생 위치 추적
         self.current_time = self.start_time
-
-    def _init_video_controller(self):
-        """비디오 컨트롤러(변수) 초기화 - VLC 기반"""
-        # 비디오 관련 변수 초기화
-        self.vlc_player = None
-        self.is_playing = False
-
-        # VLC 플레이어 초기화
-        try:
-            self.vlc_player = VLCPlayer()
-
-            if not self.vlc_player.load_video(self.video_path):
-                messagebox.showerror("오류", "비디오 초기화에 실패했습니다.")
-                self.window.destroy()
-                return
-
-            print(f"PreviewWindow: VLC 비디오 로드 완료 - {self.video_path}")
-
-        except Exception as e:
-            print(f"PreviewWindow: VLC 초기화 실패 - {e}")
-            messagebox.showerror("오류", f"비디오 초기화에 실패했습니다: {e}")
-            self.window.destroy()
-            return
 
     def _init_ui(self):
         """create_ui 메서드들 재구성한 UI 초기화"""
@@ -97,6 +83,35 @@ class PreviewWindow:
         event_system.subscribe(
             Events.SEGMENT_SAVED, self._on_segment_saved)
 
+    def _initialize_vlc(self):
+        """VLC 초기화/임베딩/비디오 로드 수행
+
+        - 컨트롤러 상태 변수(`vlc_player`, `is_playing`)는 __init__에서 선행 정의됨
+        - 여기서는 VLC 인스턴스 생성 → 캔버스 임베딩 → 비디오 로드 → 시작 위치 설정 순으로 처리
+        """
+
+        # VLC 플레이어 초기화
+        try:
+            self.vlc_player = VLCPlayer()
+
+            # 먼저 임베드 대상 위젯을 연결하여 외부 VLC 창이 뜨지 않도록 함
+            if hasattr(self, 'video_canvas') and self.video_canvas:
+                self.vlc_player.set_video_widget(self.video_canvas)
+
+            if not self.vlc_player.load_video(self.video_path, self.start_time, self.end_time):
+                messagebox.showerror("오류", "비디오 초기화에 실패했습니다.")
+                self.window.destroy()
+                return
+
+            # 미디어 옵션이 적용되지 않는 환경 대비는 재생 시점에서 처리
+            print(f"PreviewWindow: VLC 비디오 로드 완료 - {self.video_path}")
+
+        except Exception as e:
+            print(f"PreviewWindow: VLC 초기화 실패 - {e}")
+            messagebox.showerror("오류", f"비디오 초기화에 실패했습니다: {e}")
+            self.window.destroy()
+            return
+
     # =================================================================
     # UI 생성 및 관리 메서드들
     # =================================================================
@@ -114,11 +129,6 @@ class PreviewWindow:
                                     relief="solid", borderwidth=2)
         self.video_frame.pack(side="left", fill=tk.BOTH, expand=False)
         self.video_frame.pack_propagate(False)  # 크기 고정
-
-        # # VideoUtils 사용하여 비디오레이블 생성
-        # self.video_label = VideoUtils.create_video_label(self.video_frame)
-        # self.video_label.pack(expand=True, fill="both")
-        # self.video_label.config(bg="black")
 
         # VLC용 캔버스 생성
         self.video_canvas = tk.Canvas(self.video_frame, bg="black")
@@ -367,13 +377,11 @@ class PreviewWindow:
         """창 닫기 이벤트 핸들러 - app.py에서 참조하는 메서드로 VLC 기반"""
         print("PreviewWindow: 창 닫기 시작...")
 
-        # # VLC 플레이어 정리 -> 기존의 코드를 이벤트 구독 해제 이후로 배치
-        # if self.vlc_player:
-        #     self.vlc_player.cleanup()  # cleanup()이 내부적으로 stop()도 호출함
-        #     print("PreviewWindow: VLC 플레이어 리소스 정리 완료")
-
         # 1. 재생 중지 및 'after' 콜백 중지
-        self._pause_playback()  # is_playing을 False로 설정
+        if self.is_playing:
+            self._pause_playback()  # is_playing을 False로 설정
+        else:
+            pass
 
         # 2. 이벤트 구독 해제
         try:

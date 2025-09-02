@@ -69,6 +69,10 @@ class ImageExtractor:
 
             # 추출 진행
             while frame_count <= end_frame:
+                # 취소 체크
+                if cancel_event and cancel_event.is_set():
+                    print("[ImageExtractor] 취소 요청 감지 - 추출 중단")
+                    break
 
                 # 프레임 읽기 (순차적 디코딩)
                 ret, frame = cap.read()
@@ -145,7 +149,8 @@ class ImageExtractor:
     @staticmethod
     def extract_frames_with_ffmpeg(input_path, output_folder, start_time, end_time,
                                    ffmpeg_executable='ffmpeg', target_fps=None,
-                                   quality=2, base_filename=None, timestamp=None):
+                                   quality=2, base_filename=None, timestamp=None,
+                                   cancel_event=None):
         """FFmpeg을 사용하여 이미지 프레임 추출 (OpenCV 디코드 실패시 폴백)
 
         Returns dict: {'success', 'extracted_count', 'message'}
@@ -169,7 +174,7 @@ class ImageExtractor:
                 '-i', input_path,
                 '-qscale:v', str(quality)
             ]
-            # frame skip 대신 FPS 제한으로 opencv에서의 동일 효과 구현현
+            # frame skip 대신 FPS 제한으로 opencv에서의 동일 효과 구현
             if target_fps:
                 command += ['-vf', f'fps={target_fps}']
 
@@ -178,15 +183,38 @@ class ImageExtractor:
             print("[ImageExtractor] Executing FFmpeg (images) command:",
                   ' '.join(command))
 
-            # FFmpeg 실행 (서브프로세스)
-            result = subprocess.run(
+            # FFmpeg 실행 (서브프로세스) - 취소 지원
+            process = subprocess.Popen(
                 command,
-                check=False,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
-                errors='ignore',
-                timeout=300
+                errors='ignore'
+            )
+
+            # 취소 체크하면서 대기 (최적화된 버전)
+            while process.poll() is None:  # 프로세스가 실행 중일 때
+                if cancel_event and cancel_event.is_set():
+                    print("[ImageExtractor] FFmpeg 취소 요청 감지 - 프로세스 종료")
+                    process.terminate()
+                    try:
+                        process.wait(timeout=3)  # 3초로 단축
+                    except subprocess.TimeoutExpired:
+                        print("[ImageExtractor] 프로세스 강제 종료")
+                        process.kill()
+                    return {'success': False, 'extracted_count': 0, 'message': '사용자 취소'}
+
+                import time
+                time.sleep(0.05)  # 50ms로 단축 - 더 빠른 응답성
+
+            # 프로세스 결과 확인
+            stdout, stderr = process.communicate()
+            result = subprocess.CompletedProcess(
+                args=command,
+                returncode=process.returncode,
+                stdout=stdout,
+                stderr=stderr
             )
 
             # 성공/실패 여부 확인

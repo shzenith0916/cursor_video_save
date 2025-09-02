@@ -25,11 +25,14 @@ class ExtractionManager:
         self._is_image_extracting = False
         self._is_audio_extracting = False
 
-        # 취소 이벤트
-        self.cancel_event = threading.Event()
+        # 취소 이벤트 객체
+        self.cancel_event = threading.Event()  # 취소 신호 전송 여부 확인
 
         # 추출 설정
         self.extract_config = ExtractConfig()
+
+        # 이벤트 구독 설정
+        self._setup_event_listeners()
 
     def is_busy(self):
         """작업 중인지 확인"""
@@ -37,26 +40,12 @@ class ExtractionManager:
                 self._is_image_extracting or
                 self._is_audio_extracting)
 
-    def cancel_all_extractions(self):
-        """모든 추출 작업 취소"""
-        self.cancel_event.set()  # 취소 신호 전송
-        self._is_extracting = False
-        self._is_image_extracting = False
-        self._is_audio_extracting = False
-        print("모든 추출 작업 취소 신호 전송됨")
-
-        # 취소 이벤트 방송
-        try:
-            self._emit_extraction_cancelled()
-        except Exception:
-            pass
-
     def extract_video_segment(self, segment_info=None):
         """비디오 구간 추출"""
         try:
             # 중복 실행 방지
             if self._is_extracting:
-                show_custom_messagebox(
+                messagebox.showwarning(
                     self.parent_frame, "경고",
                     "이미 비디오 추출 작업이 진행 중입니다.", "warning")
                 return
@@ -89,7 +78,7 @@ class ExtractionManager:
 
     def _handle_extraction_error(self, extraction_type, error):
         """추출 준비 중 에러 처리"""
-        show_custom_messagebox(
+        messagebox.showerror(
             self.parent_frame, "오류",
             f"{extraction_type} 추출 준비 중 오류: {str(error)}", "error")
 
@@ -98,7 +87,7 @@ class ExtractionManager:
         try:
             # 중복 실행 방지
             if self._is_image_extracting:
-                show_custom_messagebox(
+                messagebox.showwarning(
                     self.parent_frame, "경고",
                     "이미 이미지 추출 작업이 진행 중입니다.", "warning")
                 return
@@ -132,7 +121,7 @@ class ExtractionManager:
         try:
             # 중복 실행 방지
             if self._is_audio_extracting:
-                show_custom_messagebox(
+                messagebox.showwarning(
                     self.parent_frame, "경고",
                     "이미 오디오 추출 작업이 진행 중입니다.", "warning")
                 return
@@ -165,10 +154,12 @@ class ExtractionManager:
         except Exception as e:
             self._handle_extraction_error("오디오", e)
 
+# ====== 추출 관련 메서드 =======
+
     def _get_selected_segment_info(self):
         """선택된 구간 정보 가져오기"""
         if not hasattr(self.app, 'saved_segments') or not self.app.saved_segments:
-            show_custom_messagebox(
+            messagebox.showwarning(
                 self.parent_frame, "경고",
                 "추출할 구간이 없습니다.\n먼저 구간을 저장해주세요.", "warning")
             return None
@@ -225,6 +216,8 @@ class ExtractionManager:
 
         return output_path if output_path else None
 
+# ====== 이미지 추출 관련 메서드 =======
+
     def _get_image_output_folder(self, input_path, segment_info):
         """이미지 출력 폴더 설정"""
         folder_name = ImageUtils.generate_output_folder_name(
@@ -265,7 +258,7 @@ class ExtractionManager:
             try:
                 os.makedirs(output_folder, exist_ok=True)
             except Exception as e:
-                show_custom_messagebox(
+                messagebox.showwarning(
                     self.parent_frame, "오류",
                     f"폴더 생성 실패: {str(e)}", "error")
                 return False
@@ -278,13 +271,11 @@ class ExtractionManager:
 
         print(f"비디오 추출 시작: {segment_info['start']}~{segment_info['end']}초")
 
-        # 진행률 이벤트 발생
-        event_system.emit(
-            Events.EXTRACTION_PROGRESS,
-            progress=0,
-            status="비디오 추출 준비 중...",
-            icon="🔄"
-        )
+        # 비디오 추출 시작 (직접 메서드 호출로 변경됨)
+
+        # 진행률 정보를 콜백으로 전달 (UI 업데이트는 new_tab.py에서)
+        if hasattr(self, '_video_progress_callback'):
+            self._video_progress_callback("비디오 추출 준비 중...")
 
         # 백그라운드 스레드에서 추출 실행
         threading.Thread(
@@ -296,18 +287,14 @@ class ExtractionManager:
     def _start_image_extraction(self, input_path, output_folder, segment_info):
         """이미지 추출 시작"""
         self._is_image_extracting = True
-        self.cancel_event.clear()
+        self.cancel_event.clear()  # 취소 신호 전송 False 값 전달
 
         print(f"이미지 추출 시작: {segment_info['start']}~{segment_info['end']}초")
         print(f"이미지 저장 폴더: {output_folder}")
 
-        # 진행률 이벤트 발생
-        event_system.emit(
-            Events.IMAGE_EXTRACTION_PROGRESS,
-            progress=0,
-            status="이미지 추출 준비 중...",
-            icon="🔄"
-        )
+        # 진행률 정보를 콜백으로 전달 (UI 업데이트는 new_tab.py에서)
+        if hasattr(self, '_image_progress_callback'):
+            self._image_progress_callback(0, "이미지 추출 준비 중...")
 
         # 백그라운드 스레드에서 추출 실행
         threading.Thread(
@@ -324,13 +311,9 @@ class ExtractionManager:
         print(f"오디오 추출 시작: {segment_info['start']}~{segment_info['end']}초")
         print(f"오디오 저장 폴더: {output_folder}")
 
-        # 진행률 이벤트 발생
-        event_system.emit(
-            Events.AUDIO_EXTRACTION_PROGRESS,
-            progress=0,
-            status="오디오 추출 준비 중...",
-            icon="🔄"
-        )
+        # 진행률 정보를 콜백으로 전달 (UI 업데이트는 new_tab.py에서)
+        if hasattr(self, '_audio_progress_callback'):
+            self._audio_progress_callback("오디오 추출 준비 중...")
 
         # 백그라운드 스레드에서 추출 실행
         threading.Thread(
@@ -342,10 +325,10 @@ class ExtractionManager:
     def _do_video_extraction(self, input_path, output_path, segment_info):
         """실제 비디오 추출 작업 (백그라운드)"""
         try:
-            # 취소 확인
-            if self.cancel_event.is_set():
-                self._emit_extraction_cancelled()
-                return
+            # # 취소 확인
+            # if self.cancel_event.is_set():
+            #     self._on_extraction_cancel()
+            #     return
 
             # extract/video_extractor.py 의 VideoExtractor로 추출
             result = VideoExtractor.extract_segment(
@@ -354,7 +337,8 @@ class ExtractionManager:
                 start_time=segment_info['start'],
                 end_time=segment_info['end'],
                 progress_callback=self._video_progress_callback,
-                ffmpeg_executable=self._get_ffmpeg_executable()
+                ffmpeg_executable=self._get_ffmpeg_executable(),
+                cancel_event=self.cancel_event
             )
 
             # 결과 이벤트 발생
@@ -370,7 +354,7 @@ class ExtractionManager:
         try:
             # 취소 확인
             if self.cancel_event.is_set():
-                self._emit_extraction_cancelled()
+                self._on_extraction_cancel()
                 return
 
             # 이미지 추출 시작 이벤트
@@ -412,7 +396,8 @@ class ExtractionManager:
                     output_folder=output_folder,
                     start_time=segment_info['start'],
                     end_time=segment_info['end'],
-                    ffmpeg_executable=self._get_ffmpeg_executable()
+                    ffmpeg_executable=self._get_ffmpeg_executable(),
+                    cancel_event=self.cancel_event
                 )
                 if ff_result.get('success') and ff_result.get('extracted_count', 0) > 0:
                     # 폴백 성공 시 결과 변환하여 동일 경로로 전달
@@ -428,26 +413,31 @@ class ExtractionManager:
                     self._handle_image_extraction_error(error_msg)
                     return
 
-            # 결과 이벤트 발생
-            self.parent_frame.after(
-                0, lambda: self._emit_image_extraction_complete(result, output_folder))
+            # 취소된 경우에는 완료 이벤트 발생하지 않음
+            if not self.cancel_event.is_set():
+                # 결과 이벤트 발생
+                self.parent_frame.after(
+                    0, lambda: self._emit_image_extraction_complete(result, output_folder))
 
         except Exception as e:
             error_msg = f"이미지 추출 중 오류 발생: {str(e)}"
             self._handle_image_extraction_error(error_msg)
 
     def _handle_image_extraction_error(self, error_msg):
-        """이미지 추출 에러 처리 (이벤트 + UI)"""
-        event_system.emit(Events.IMAGE_EXTRACTION_ERROR, message=error_msg)
-        self.parent_frame.after(
-            0, lambda: self._emit_extraction_error(error_msg))
+        """이미지 추출 작업 중 오류가 발생했을때 호출되는 메서드 - 에러 이벤트 발행"""
+        self._is_image_extracting = False
+        # 취소된 경우 에러 이벤트 발행하지 않음
+        if not self.cancel_event.is_set():
+            self.parent_frame.after(0, lambda: event_system.emit(
+                Events.IMAGE_EXTRACTION_ERROR,
+                message=error_msg, progress=0, status="오류 발생", icon="⚠️"))
 
     def _do_audio_extraction(self, input_path, output_folder, segment_info):
         """실제 오디오 추출 작업 (백그라운드)"""
         try:
             # 취소 확인
             if self.cancel_event.is_set():
-                self._emit_extraction_cancelled()
+                self._on_extraction_cancel()
                 return
 
             # AudioExtractor를 사용하여 오디오 추출
@@ -464,16 +454,28 @@ class ExtractionManager:
                 progress_callback=self._audio_progress_callback,
                 audio_format='mp3',
                 audio_quality='192k',
-                ffmpeg_executable=self._get_ffmpeg_executable()
+                ffmpeg_executable=self._get_ffmpeg_executable(),
+                cancel_event=self.cancel_event
             )
 
-            # 결과 이벤트 발생
-            self.parent_frame.after(
-                0, lambda: self._emit_audio_extraction_complete(result, output_folder))
+            # 취소된 경우에는 완료 이벤트 발생하지 않음
+            if not self.cancel_event.is_set():
+                # 결과 이벤트 발생
+                self.parent_frame.after(
+                    0, lambda: self._emit_audio_extraction_complete(result, output_folder))
 
         except Exception as e:
             self.parent_frame.after(
                 0, lambda err=e: self._emit_extraction_error(str(err)))
+
+    def _handle_audio_extraction_error(self, error_msg):
+        """오디오 추출 작업 중 오류가 발생했을때 호출되는 메서드 - 에러 이벤트 발행"""
+        self._is_audio_extracting = False
+
+        # 취소된 경우 에러 이벤트 발행하지 않음
+        if not self.cancel_event.is_set():
+            self.parent_frame.after(0, lambda: event_system.emit(
+                Events.AUDIO_EXTRACTION_ERROR, message=error_msg))
 
     def _video_progress_callback(self, message):
         """비디오 추출 진행률 콜백"""
@@ -487,7 +489,7 @@ class ExtractionManager:
         """이미지 추출 진행률 콜백"""
         if not self.cancel_event.is_set():
             self.parent_frame.after(0, lambda: event_system.emit(
-                Events.IMAGE_EXTRACTION_PROGRESS,
+                Events.EXTRACTION_PROGRESS,
                 progress=progress,
                 status=f"이미지 {extracted_count}/{total_frames} 저장 중..."
             ))
@@ -496,141 +498,45 @@ class ExtractionManager:
         """오디오 추출 진행률 콜백"""
         if not self.cancel_event.is_set():
             self.parent_frame.after(0, lambda: event_system.emit(
-                Events.AUDIO_EXTRACTION_PROGRESS,
+                Events.EXTRACTION_PROGRESS,
                 progress=50,
                 status=message
             ))
 
     def _emit_video_extraction_complete(self, result):
-        """비디오 추출 완료 이벤트 발생"""
+        """비디오 추출 완료 이벤트 발행만"""
         self._is_extracting = False
+        output_path = result.get('output_path', '')
 
         event_system.emit(
             Events.EXTRACTION_COMPLETE,
-            success=result['success'],
-            message=result['message'],
-            output_path=result.get('output_path', ''),
-            progress=100,
-            status="비디오 추출 완료!"
+            extract_type="video",
+            success=result.get('success', False),
+            output_path=result.get('output_path', '')
         )
 
-        # 사용자 알림 (완료 메시지)
-        try:
-            success = result.get('success', False)
-            output_path = result.get('output_path', '')
-            message = result.get('message', '')
-            if success and output_path:
-                self.parent_frame.after(0, lambda: show_custom_messagebox(
-                    self.parent_frame,
-                    "비디오 추출 완료",
-                    f"저장 위치:\n{output_path}",
-                    "success"
-                ))
-            elif not success:
-                self.parent_frame.after(0, lambda: show_custom_messagebox(
-                    self.parent_frame,
-                    "비디오 추출 실패",
-                    message or "알 수 없는 오류",
-                    "error"
-                ))
-        except Exception:
-            pass
-
     def _emit_image_extraction_complete(self, result, output_folder):
-        """이미지 추출 완료 이벤트 발생"""
+        """이미지 추출 완료 이벤트 발행만"""
         self._is_image_extracting = False
 
         event_system.emit(
             Events.IMAGE_EXTRACTION_COMPLETE,
+            extract_type="image",
             extracted_count=result['extracted_count'],
-            total_extract_frames=result['total_frames'],
-            output_folder=output_folder,
-            progress=100,
-            status=f"{result['extracted_count']}개 이미지 추출 완료!"
+            output_folder=output_folder,  # 저장 위치 정보
+            success=result.get('success', True)  # result에서 success 값 가져오기
         )
 
-        # 사용자 알림 (완료 메시지)
-        try:
-            count = result.get('extracted_count', 0)
-            total = result.get('total_frames', 0)
-            if total == 0 or count == 0:
-                # 코덱/구간 문제 등으로 저장된 이미지가 없을 때 사용자에게 안내
-                self.parent_frame.after(0, lambda: show_custom_messagebox(
-                    self.parent_frame,
-                    "이미지 추출 결과",
-                    "이미지가 저장되지 않았습니다.\n\n가능한 원인:\n- 선택한 구간에 유효한 프레임이 없음\n- OpenCV 코덱 불일치로 디코딩 실패\n\n다른 구간으로 시도하거나 영상 코덱을 변환해 보세요.",
-                    "warning"
-                ))
-                return
-            self.parent_frame.after(0, lambda: show_custom_messagebox(
-                self.parent_frame,
-                "이미지 추출 완료",
-                f"저장 폴더:\n{output_folder}\n\n저장 개수: {count}/{total}",
-                "success"
-            ))
-        except Exception:
-            pass
-
     def _emit_audio_extraction_complete(self, result, output_folder):
-        """오디오 추출 완료 이벤트 발생"""
+        """오디오 추출 완료 이벤트 발행만"""
         self._is_audio_extracting = False
-
-        # 결과 확인 및 경고
-        out_path = result.get('output_path') if isinstance(
-            result, dict) else None
-        if not out_path or not os.path.exists(out_path):
-            print("⚠️ 오디오 추출 결과 파일이 확인되지 않습니다.")
-            event_system.emit(
-                Events.AUDIO_EXTRACTION_ERROR,
-                error=result.get('message', '오디오 파일 생성 실패'),
-                progress=0,
-                status="오디오 파일 생성 실패")
-            return
+        output_path = result.get('output_path', '')
 
         event_system.emit(
             Events.AUDIO_EXTRACTION_COMPLETE,
-            extracted_count=result.get('extracted_count', 1),
-            output_folder=os.path.dirname(
-                out_path) if out_path else output_folder,
-            progress=100,
-            status="오디오 추출 완료!"
-        )
-
-        # 사용자 알림 (완료 메시지)
-        try:
-            self.parent_frame.after(0, lambda: show_custom_messagebox(
-                self.parent_frame,
-                "오디오 추출 완료",
-                f"저장 위치:\n{out_path}",
-                "success"
-            ))
-        except Exception:
-            pass
-
-    def _emit_extraction_error(self, error_message):
-        """추출 오류 이벤트 발생"""
-        self._is_extracting = False
-        self._is_image_extracting = False
-        self._is_audio_extracting = False
-
-        event_system.emit(
-            Events.EXTRACTION_ERROR,
-            error=error_message,
-            progress=0,
-            status="오류 발생",
-            icon="⚠️"
-        )
-
-    def _emit_extraction_cancelled(self):
-        """추출 취소 이벤트 발생"""
-        self._is_extracting = False
-        self._is_image_extracting = False
-        self._is_audio_extracting = False
-
-        event_system.emit(
-            Events.EXTRACTION_CANCEL,
-            progress=0,
-            status="취소됨"
+            extract_type="audio",
+            output_path=output_path,
+            success=result.get('success', True)  # result에서 success 값 가져오기
         )
 
     @staticmethod
@@ -697,7 +603,7 @@ class ExtractionManager:
 
         else:
             self.update_progress(0, " 추출 실패", "❌")
-            show_custom_messagebox(
+            messagebox.showerror(
                 self.frame, "비디오 추출 실패", f"추출 실패: {result['message']}", "error")
 
         # 5초 후 진행률 바 초기화
@@ -709,7 +615,7 @@ class ExtractionManager:
         self._is_extracting = False
 
         self.update_progress(0, "오류 발생", "⚠️")
-        show_custom_messagebox(
+        messagebox.showerror(
             self.frame, "오류", f"추출 중 오류: {str(error)}", "warning")
 
     def update_progress_safe(self, value, status="", icon="⚡", **kwargs):  # 백그라운드 작업
@@ -720,3 +626,33 @@ class ExtractionManager:
         """FFmpeg 실행 경로 가져오기"""
         return (self.ffmpeg_manager.ffmpeg_path
                 if self.ffmpeg_manager and self.ffmpeg_manager.ffmpeg_path else 'ffmpeg')
+
+    def _setup_event_listeners(self):
+        """이벤트 리스너 설정 - 취소 이벤트만 구독"""
+        try:
+            # 추출 취소 이벤트 구독
+            event_system.subscribe(Events.EXTRACTION_CANCEL,
+                                   self._cancel_all_extractions)
+
+            print("ExtractionManager 이벤트 리스너 설정 완료")
+
+        except Exception as e:
+            print(f"ExtractionManager 이벤트 리스너 설정 중 오류: {str(e)}")
+
+
+# ========= 이벤트 콜백 메서드 =========
+
+    # 추출 시작 이벤트 콜백들은 제거됨 - 직접 호출로 변경
+
+    def _cancel_all_extractions(self, **kwargs):
+        """추출 취소 이벤트 발행 - 통합된 취소 처리"""
+        try:
+            # 상태 플래그 리셋
+            self._is_image_extracting = False
+            self._is_audio_extracting = False
+
+            # 취소 이벤트 객체 설정
+            self.cancel_event.set()
+            # UI 업데이트는 new_tab.py에서 처리하므로 이벤트 발행 및 알림 제거
+        except Exception as e:
+            print(f"추출 취소 처리 중 오류: {str(e)}")

@@ -3,7 +3,6 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox, filedialog
 import os
-import csv
 from datetime import datetime
 from utils.utils import VideoUtils
 
@@ -316,113 +315,49 @@ class SegmentTable:
                     opinion2))
 
     def delete_selected_segment(self):
-        """선택한 구간 삭제"""
+        """선택한 구간 삭제 - UI만 담당"""
         selected_items = self.table.selection()
         if not selected_items:
             messagebox.showwarning("경고", "삭제할 항목을 선택해주세요.")
+
+            # 사용자 경험 상: 선택 없음 경고 시
+            if self.preview_window and hasattr(self.preview_window, 'window'):
+                try:
+                    self.preview_window.window.focus_force()
+                except:
+                    pass  # 창이 이미 닫힌 경우 무시
             return
 
         if messagebox.askyesno("확인", "선택한 구간을 정말 삭제하시겠습니까?"):
             # 여러 항목을 선택한 경우 (현재는 단일 선택만 지원)
             for item in selected_items:
                 index = self.table.index(item)
-                if hasattr(self.app, 'saved_segments') and self.app.saved_segments and index < len(self.app.saved_segments):
-                    del self.app.saved_segments[index]
+                # App 클래스의 중앙화된 데이터 관리 메서드 호출
+                success, message = self.app.delete_segment(index)
 
-            self.refresh()
-            messagebox.showinfo("성공", "선택한 구간이 삭제되었습니다.")
+                if success:
+                    messagebox.showinfo("성공", message)
+                else:
+                    messagebox.showerror("오류", message)
 
-            # 미리보기 창에서 삭제한 경우, 미리보기 창으로 포커스 복원
+            # 사용자 경험 상: 삭제 성공 시
             if self.preview_window and hasattr(self.preview_window, 'window'):
                 try:
                     self.preview_window.window.focus_force()
                 except ttk.TclError:
                     pass  # 창이 이미 닫힌 경우 무시
 
-            # 삭제 후 NewTab의 테이블도 업데이트
-            if hasattr(self.app, 'new_tab_instance') and hasattr(self.app.new_tab_instance, 'refresh_table'):
-                self.app.new_tab_instance.refresh_table()
-
     def export_to_csv(self):
-        """CSV 내보내기"""
+        """CSV 내보내기 - UI만 담당"""
+        # App 클래스의 중앙화된 데이터 관리 메서드 호출
+        success, message = self.app.export_segments_to_csv()
 
-        if not hasattr(self.app, 'saved_segments') or not self.app.saved_segments:
-            messagebox.showwarning("경고", "내보낼 구간 데이터가 없습니다.")
-            return
+        if success:
+            messagebox.showinfo("성공", message)
+        else:
+            messagebox.showwarning("경고", message)
 
-        # 자동 파일명 생성
-        default_filename = self.generate_csv_filename()
-
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv")],
-            title="구간데이터_저장",
-            initialfile=default_filename
-        )
-
-        if file_path:
-            try:
-                with open(file_path, 'w', newline='', encoding='cp949') as csvfile:
-                    writer = csv.writer(csvfile)
-                    writer.writerow(
-                        ['파일명', '시작 시간', '종료 시간', '구간 길이', '타입', '의견1', '의견2'])
-
-                    for segment in self.app.saved_segments:
-                        filename = segment.get('file', '')
-                        type_value = os.path.splitext(
-                            filename)[0][-2:] if filename else ''
-
-                        writer.writerow([
-                            filename,
-                            VideoUtils.format_time(segment['start']),
-                            VideoUtils.format_time(segment['end']),
-                            VideoUtils.format_time(segment['duration']),
-                            type_value,
-                            segment.get('opinion1', ''),
-                            segment.get('opinion2', '')
-                        ])
-
-                messagebox.showinfo(
-                    "성공", f"데이터가 {os.path.basename(file_path)}에 저장되었습니다.")
-            except Exception as e:
-                messagebox.showerror("오류", f"파일 저장 중 오류가 발생했습니다: {str(e)}")
-
-    def generate_csv_filename(self):
-        """CSV 파일명 자동 생성"""
-        # 현재 날짜와 시간
-        now = datetime.now()
-        date_str = now.strftime("%Y%m%d")
-
-        # 비디오 파일명 가져오기
-        video_name = "비디오"
-        if hasattr(self.app, 'video_path') and self.app.video_path:
-            if hasattr(self.app.video_path, 'get'):
-                video_path = self.app.video_path.get()
-            else:
-                video_path = self.app.video_path
-
-            if video_path:
-                # 파일명에서 확장자 제거
-                video_name = os.path.splitext(os.path.basename(video_path))[0]
-                # 파일명에서 특수문자 제거 (Windows 파일명 호환성)
-                video_name = "".join(
-                    c for c in video_name if c.isalnum() or c in (' ', '-', '_')).strip()
-                if not video_name:
-                    video_name = "비디오"
-
-        # 구간 수 정보
-        segment_count = len(self.app.saved_segments) if hasattr(
-            self.app, 'saved_segments') else 0
-
-        # 파일명 생성: "비디오명_구간데이터_구간수개_날짜시간.csv"
-        filename = f"{video_name}_구간데이터_{segment_count}개_{date_str}.csv"
-
-        # 파일명 길이 제한 (Windows 경로 길이 제한 고려)
-        if len(filename) > 100:
-            video_name = video_name[:30] + "..."
-            filename = f"{video_name}_구간데이터_{segment_count}개_{date_str}.csv"
-
-        return filename
+    # generate_csv_filename 메서드는 App 클래스로 이동됨 - 중앙화된 데이터 관리
 
     def refresh(self):
         """테이블 데이터 새로고침"""
@@ -434,3 +369,6 @@ class SegmentTable:
         if items:
             self.table.selection_set(items[0])
             self.table.see(items[0])  # 스크롤해서 보이게 하기
+
+
+# 사용자 액션 → SegmentTable → App 클래스 → 데이터 조작 → 이벤트 발행 → UI 업데이트

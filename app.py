@@ -5,6 +5,8 @@ from tkinter import messagebox, filedialog
 import os
 import cv2
 import threading
+import csv
+from datetime import datetime
 from utils.styles import AppStyles
 from utils.ui_utils import UiUtils
 from utils.utils import VideoUtils
@@ -284,6 +286,8 @@ class VideoEditorApp:
 
         return True
 
+# ================ 선택 구간 미리보기 창 관련 =================
+
     def preview_selection(self):
         '''선택구간 미리보기 버튼을 눌렀을 때 호출되는 함수 (UI 이벤트 핸들러)로 미리보기 창 생성'''
 
@@ -355,6 +359,8 @@ class VideoEditorApp:
         self.is_playing = False
         self.is_previewing = False  # 구간 재생 상태 관리
         self.play_button.config(text="► 재생")
+
+# ================ 저장된 구간 테이블 관련 =================
 
     def get_saved_segments(self):
         """저장된 구간 목록 반환"""
@@ -459,9 +465,100 @@ class VideoEditorApp:
                 self.new_tab_instance.refresh_table()
                 print("✅ 비디오 추출 탭 테이블 업데이트 완료")
 
-            # 다른 탭들이 있다면 여기에 추가
-            # if hasattr(self, 'other_tab_instance'):
-            #     self.other_tab_instance.refresh_table()
-
         except Exception as e:
             print(f"테이블 업데이트 중 오류: {e}")
+
+    def delete_segment(self, index):
+        """구간 삭제 - 중앙화된 데이터 관리"""
+        try:
+            if 0 <= index < len(self.saved_segments):
+                deleted_segment = self.saved_segments.pop(index)
+                event_system.emit(Events.SEGMENT_DELETED,
+                                  segment=deleted_segment, index=index)
+                self.update_all_tables()
+                return True, "선택한 구간이 삭제되었습니다."
+            else:
+                return False, "유효하지 않은 구간 인덱스입니다."
+        except Exception as e:
+            return False, f"구간 삭제 중 오류가 발생했습니다: {str(e)}"
+
+    def export_segments_to_csv(self):
+        """구간 데이터 CSV 내보내기 - 중앙화된 데이터 관리"""
+        try:
+            if not self.saved_segments:
+                return False, "내보낼 구간 데이터가 없습니다."
+
+            # 자동 파일명 생성
+            default_filename = self.generate_csv_filename()
+
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv")],
+                title="구간데이터_저장",
+                initialfile=default_filename
+            )
+
+            if not file_path:
+                return False, "파일 저장이 취소되었습니다."
+
+            with open(file_path, 'w', newline='', encoding='cp949') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(
+                    ['파일명', '시작 시간', '종료 시간', '구간 길이', '타입', '의견1', '의견2'])
+
+                for segment in self.saved_segments:
+                    filename = segment.get('file', '')
+                    type_value = os.path.splitext(
+                        filename)[0][-2:] if filename else ''
+
+                    writer.writerow([
+                        filename,
+                        VideoUtils.format_time(segment['start']),
+                        VideoUtils.format_time(segment['end']),
+                        VideoUtils.format_time(segment['duration']),
+                        type_value,
+                        segment.get('opinion1', ''),
+                        segment.get('opinion2', '')
+                    ])
+
+            return True, f"데이터가 {os.path.basename(file_path)}에 저장되었습니다."
+
+        except Exception as e:
+            return False, f"파일 저장 중 오류가 발생했습니다: {str(e)}"
+
+    def generate_csv_filename(self):
+        """CSV 파일명 자동 생성 - 중앙화된 데이터 관리"""
+        # 현재 날짜와 시간
+        now = datetime.now()
+        date_str = now.strftime("%Y%m%d")
+
+        # 비디오 파일명 가져오기
+        video_name = "비디오"
+        if hasattr(self, 'video_path') and self.video_path:
+            if hasattr(self.video_path, 'get'):
+                video_path = self.video_path.get()
+            else:
+                video_path = self.video_path
+
+            if video_path:
+                # 파일명에서 확장자 제거
+                video_name = os.path.splitext(os.path.basename(video_path))[0]
+                # 파일명에서 특수문자 제거 (Windows 파일명 호환성)
+                video_name = "".join(
+                    c for c in video_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                if not video_name:
+                    video_name = "비디오"
+
+        # 구간 수 정보
+        segment_count = len(self.saved_segments) if hasattr(
+            self, 'saved_segments') else 0
+
+        # 파일명 생성: "비디오명_구간데이터_구간수개_날짜시간.csv"
+        filename = f"{video_name}_구간데이터_{segment_count}개_{date_str}.csv"
+
+        # 파일명 길이 제한 (Windows 경로 길이 제한 고려)
+        if len(filename) > 100:
+            video_name = video_name[:30] + "..."
+            filename = f"{video_name}_구간데이터_{segment_count}개_{date_str}.csv"
+
+        return filename

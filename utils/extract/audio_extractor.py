@@ -28,7 +28,7 @@ class AudioExtractor:
     @staticmethod
     def extract_audio_segment(input_video_path, output_audio_path, start_time, end_time,
                               progress_callback=None, audio_format='mp3', audio_quality='192k',
-                              ffmpeg_executable='ffmpeg'):
+                              ffmpeg_executable='ffmpeg', cancel_event=None):
         """오디오 세그먼트 추출"""
         try:
             command = AudioExtractor.build_audio_command(
@@ -38,7 +38,8 @@ class AudioExtractor:
             if progress_callback:
                 progress_callback("오디오 추출 중...")
 
-            result = VideoExtractor.execute_command(command)
+            result = VideoExtractor.execute_command(
+                command, cancel_event=cancel_event)
             if result.get('success'):
                 result['output_path'] = output_audio_path
                 result['message'] = "오디오 세그먼트 추출 성공"

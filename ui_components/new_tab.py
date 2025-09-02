@@ -12,7 +12,6 @@ from utils.ui_utils import UiUtils
 from utils.utils import VideoUtils, show_custom_messagebox
 from utils.extract.image_extractor import ImageUtils
 from utils.extract.video_extractor import VideoExtractor, ExtractConfig
-from .command_handlers import NewTabCommandHandler
 from utils.event_system import event_system, Events
 from utils.extract_manager import ExtractionManager
 from utils.ffmpeg_manager import FFmpegManager
@@ -30,13 +29,9 @@ class NewTab(BaseTab):
         self.extraction_manager = ExtractionManager(
             self.frame, self.app, self.ffmpeg_manager)
 
-        # NewTab Command handler 초기화
-        self.new_command_handler = NewTabCommandHandler(app)
-        # command_handler에 new_tab 참조 설정
-        self.new_command_handler.set_new_tab(self)
-
         self.create_ui()  # NewTab UI 생성
-        self._setup_event_listeners()  # 이벤트 리스너 설정
+        self._setup_event_listeners()  # 추출 관련 이벤트 리스너 설정
+        self._setup_cancel_button_listeners()  # 취소 버튼 상태 관리 리스너 설정
 
         # 앱에 NewTab 인스턴스 등록 (PreviewWindow에서 참조할 수 있도록)
         self.app.new_tab_instance = self
@@ -255,7 +250,7 @@ class NewTab(BaseTab):
             button_frame,
             text="비디오 추출",
             style='3Pastel.TButton',
-            command=self.new_command_handler.on_extract_segments
+            command=self.on_extract_video
         )
         self.video_extract_button.pack(
             pady=5, padx=5, fill=ttk.X, expand=True)
@@ -265,7 +260,7 @@ class NewTab(BaseTab):
             button_frame,
             text="이미지 추출",
             style='3Pastel.TButton',
-            command=self.new_command_handler.on_extract_images
+            command=self.on_extract_images
         )
         self.image_extract_button.pack(pady=5, padx=5, fill=ttk.X, expand=True)
 
@@ -274,16 +269,17 @@ class NewTab(BaseTab):
             button_frame,
             text="오디오 추출",
             style='3Pastel.TButton',
-            command=self.new_command_handler.on_extract_audio
+            command=self.on_extract_audio
         )
         self.audio_extract_button.pack(pady=5, padx=5, fill=ttk.X, expand=True)
 
-        # 취소 버튼 (3Pastel 스타일)
+        # 취소 버튼 (3Pastel 스타일) - 초기 상태: 비활성화
         self.cancel_button = ttk.Button(
             button_frame,
             text="작업 취소",
             style='3Pastel.TButton',
-            command=self.new_command_handler.on_cancel_extraction
+            command=event_system.emit(Events.EXTRACTION_CANCEL),
+            state=tk.DISABLED  # 초기 상태: 비활성화
         )
         self.cancel_button.pack(pady=5, padx=5, fill=ttk.X, expand=True)
 
@@ -478,147 +474,192 @@ class NewTab(BaseTab):
                                   )
         save_location.pack(fill=ttk.X, pady=(10, 5), anchor="w")
 
-# ------------------------------------------------------------------------------------------------
+# ===== 추출 시작 메서드 =====
 
-    def _on_extraction_start(self, segments=None, **kwargs):
-        """비디오 추출 시작 이벤트 처리"""
-        try:
-            # 이미 추출 중이면 무시
-            if self.extraction_manager.is_busy():
-                return
-            # 선택된 구간으로 추출 시작
-            self.extraction_manager.extract_video_segment()
-        except Exception as e:
-            print(f"추출 시작 이벤트 처리 오류 발생: {e}")
-            show_custom_messagebox(
-                self.frame, "오류", f"추출 시작 중 오류 발생: {str(e)}")
+    def on_extract_video(self):
+        """구간 추출 시작"""
+        segments = self.app.get_saved_segments()
+        if segments:
+            # 취소 버튼 비활성화 -> 비디오는 취소 불가
+            self._disable_cancel_button()
+            # 이벤트 발행 없이 직접 추출 시작
+            self.extraction_manager.extract_video_segment(segments[0])
+        else:
+            messagebox.showwarning(
+                "경고", "추출할 구간이 없습니다.\n먼저 구간을 저장해주세요.", "warning")
 
-    def _on_image_extraction_start(self, **kwargs):
-        """이미지 추출 시작 이벤트 처리"""
-        try:
-            if self.extraction_manager.is_busy():
-                return
+    def on_extract_images(self):
+        """이미지 추출 시작"""
+        segments = self.app.get_saved_segments()
+        if segments:
+            # 취소 버튼 활성화
+            self._enable_cancel_button()
+            # 이벤트 발행 없이 직접 추출 시작
             self.extraction_manager.extract_images()
+        else:
+            messagebox.showwarning("경고", "추출할 구간이 없습니다.\n먼저 구간을 저장해주세요.")
 
-        except Exception as e:
-            show_custom_messagebox(
-                self.frame, "오류", f"이미지 추출 시작 중 오류 발생: {str(e)}")
-
-    def _on_audio_extraction_start(self, **kwargs):
-        """오디오 추출 시작 이벤트 처리"""
-        try:
-            if self.extraction_manager.is_busy():
-                return
+    def on_extract_audio(self):
+        """오디오 추출 시작"""
+        segments = self.app.get_saved_segments()
+        if segments:
+            # 취소 버튼 활성화
+            self._enable_cancel_button()
+            # 이벤트 발행 없이 직접 추출 시작
             self.extraction_manager.extract_audio()
+        else:
+            messagebox.showwarning("경고", "추출할 구간이 없습니다.\n먼저 구간을 저장해주세요.")
+
+    # ===== 취소 처리 메서드 =====
+
+    def on_extraction_cancel(self, **kwargs):
+        """추출 취소 처리 - 통합된 취소 로직"""
+        try:
+            # 취소 버튼 비활성화
+            self._disable_cancel_button()
+
+            # 실제 취소 요청 전달
+            if hasattr(self.extraction_manager, '_cancel_all_extractions'):
+                self.extraction_manager._cancel_all_extractions()
+
+            # 취소 완료 처리, 메세지 표시
+            self._update_video_audio_progress(0, "취소됨")
+            messagebox.showinfo("추출 취소", "추출 작업이 취소되었습니다.")
 
         except Exception as e:
-            show_custom_messagebox(
-                self.frame, "오류", f"오디오 추출 시작 중 오류 발생: {str(e)}")
+            print(f"추출 취소 이벤트 발행 중 오류: {e}")
 
-    def _on_extraction_cancel(self, **kwargs):
-        """추출 취소 이벤트 처리"""
+# ======= 진행률 업데이트 메서드 =======
+    def _handle_progress_update(self, **kwargs):
+        """통합된 진행률 업데이트 처리 - extract_type에 따라 분기"""
+        extract_type = kwargs.get('extract_type', '')
+
+        if extract_type == 'image':
+            # 이미지 추출 진행률
+            progress = kwargs.get('progress', 0)
+            extracted_count = kwargs.get('extracted_count', 0)
+            total_frames = kwargs.get('total_frames', 0)
+            self._update_image_progress(
+                progress, extracted_count, total_frames)
+        else:
+            # 비디오/오디오 추출 진행률
+            progress = kwargs.get('progress', 0)
+            status = kwargs.get('status', '')
+            self._update_video_audio_progress(progress, status)
+
+    def _update_video_audio_progress(self, progress=0, status=""):  # 프론트엔드 작업
+        """비디오/오디오 추출 진행률 업데이트 - 단순 진행률만"""
         try:
-            self.extraction_manager.cancel_all_extractions()
-            self.update_progress(0, '취소됨')
-            show_custom_messagebox(
-                self.frame, "추출 취소", "사용자에 의해 추출이 취소되었습니다.", "info")
-        except Exception as e:
-            print(f"추출 취소 이벤트 처리 오류: {e}")
+            if progress is not None:
+                self.progress_bar['value'] = float(progress)
+                self.progress_percentage.config(
+                    text=f"{int(float(progress))}%")
 
-    def update_progress(self, *args, value=0, status="", icon="⚡", **kwargs):  # 프론트엔드 작업
-        """진행률 업데이트 (positional/kwargs 모두 대응)"""
-        try:
-            # positional 인자 처리: (value), (value, status), (value, status, icon)
-            if args:
-                if len(args) >= 1:
-                    value = args[0]
-                if len(args) >= 2:
-                    status = args[1]
-                if len(args) >= 3:
-                    icon = args[2]
-
-            # 키워드 인수로 progress가 전달된 경우 value 우선 적용
-            if 'progress' in kwargs and kwargs['progress'] is not None:
-                value = kwargs['progress']
-
-            if value is not None:
-                try:
-                    self.progress_bar['value'] = float(value)
-                    self.progress_percentage.config(
-                        text=f"{int(float(value))}%")
-                except Exception:
-                    pass
-
-            # 상태 메시지 업데이트
-            status_kw = kwargs.get('status')
-            if status_kw is not None:
-                status = status_kw
-
+            # 상태 메세지 업데이트트
             if status:
                 self.progress_status.config(text=f"ⓘ {status}")
-            elif value == 0:
-                self.progress_status.config(text="ⓘ 작업 대기 중입니다.")
-            elif value < 100:
+            elif progress < 100:
                 self.progress_status.config(
-                    text=f"ⓘ 작업 진행 중... ({int(float(value))}%)")
-            elif value == 100:
+                    text=f"ⓘ 작업 진행 중... ({int(float(progress))}%)")
+            elif progress == 100:
                 self.progress_status.config(text="ⓘ 작업이 완료되었습니다!")
 
         except Exception as e:
-            print(f"진행률 업데이트 중 오류 발생: {e}")
+            print(f"진행률 업데이트 중 오류: {e}")
+
+    def _update_image_progress(self, progress, extracted_count=None, total_frames=None):
+        try:
+            # 진행률 바 업데이트
+            if progress is not None:
+                self.progress_bar['value'] = float(progress)
+                self.progress_percentage.config(
+                    text=f"ⓘ 이미지 {extracted_count}/{total_frames} 저장 중... ({int(float(progress))}%)")
+            else:
+                self.progress_status.config(
+                    text=f"ⓘ 이미지 추출 중...({int(float(progress))}%)")
+
+        except Exception as e:
+            print(f"이미지 진행률 업데이트 중 오류 발생: {e}")
+
+    # ======= 추출 오류 메서드 =======
 
     def _show_extraction_error(self, error, **kwargs):
-        """추출 오류 메시지 표시"""
-        messagebox.showerror("오류", f"비디오 추출 중 오류 발생:\n{error}")
+        """추출 오류 메시지 표시 - 통합된 에러 처리"""
+        messagebox.showerror("오류", f"추출 중 오류 발생:\n{error}")
 
-    def _show_image_extraction_error(self, error, **kwargs):
-        """이미지 추출 오류 메시지 표시"""
-        messagebox.showerror("오류", f"이미지 추출 중 오류 발생:\n{error}")
+    def _show_extraction_success(self, extract_type, **kwargs):
+        """추출 성공 메시지 표시 - 통합된 성공 처리"""
+        if extract_type == 'image':
+            # 이미지 추출 완료 시 상세 정보 표시
+            extracted_count = kwargs.get('extracted_count', 0)
+            output_folder = kwargs.get('output_folder', '')
+            self._update_image_progress(100, extracted_count, extracted_count)
+            messagebox.showinfo("성공", f"이미지 추출이 완료되었습니다!\n"
+                                f"총 {extracted_count}개 이미지 저장.\n"
+                                f"저장 위치치: {output_folder}")
+        else:
+            # 진행률을 100%로 설정
+            self._update_video_audio_progress(100, "추출 완료!")
+            output_folder = kwargs.get('output_folder', '')
+            messagebox.showinfo("성공", f"{extract_type} 추출이 완료되었습니다!\n"
+                                f"저장 위치: {output_folder}")
 
-    def _show_audio_extraction_error(self, error, **kwargs):
-        """오디오 추출 오류 메시지 표시"""
-        messagebox.showerror("오류", f"오디오 추출 중 오류 발생:\n{error}")
-
-    # ===== 이벤트 리스너 및 핸들러 (UI 메서드 뒤로 이동) =====
+    # ===== 이벤트 리스너 설정 =====
 
     def _setup_event_listeners(self):
-        """이벤트 리스너 설정"""
+        """이벤트 리스너 설정 - UI 업데이트 관련 이벤트만 구독"""
         try:
-            # 추출 관련 이벤트 구독
-            event_system.subscribe(Events.EXTRACTION_START,
-                                   self._on_extraction_start)
-            # UI 요청: 취소 요청 시에만 실제 cancel 호출
-            event_system.subscribe(Events.EXTRACTION_CANCEL_REQUEST,
-                                   self._on_extraction_cancel)
-            # 매니저 방송: 취소 완료 방송은 UI 업데이트만 처리
-            event_system.subscribe(Events.EXTRACTION_CANCEL,
-                                   self.update_progress)
-            event_system.subscribe(Events.EXTRACTION_PROGRESS,
-                                   self.update_progress)
-            event_system.subscribe(Events.EXTRACTION_COMPLETE,
-                                   self.update_progress)
-            event_system.subscribe(Events.EXTRACTION_ERROR,
+            # 진행률 UI 업데이트 이벤트 구독 - PROGRESS_UPDATE로 통일
+            event_system.subscribe(
+                Events.PROGRESS_UPDATE, self._handle_progress_update)
+
+            # 추출 에러 이벤트 구독
+            event_system.subscribe(Events.VIDEO_EXTRACTION_ERROR,
+                                   self._show_extraction_error)
+            event_system.subscribe(Events.IMAGE_EXTRACTION_ERROR,
+                                   self._show_extraction_error)
+            event_system.subscribe(Events.AUDIO_EXTRACTION_ERROR,
                                    self._show_extraction_error)
 
-            # 이미지 추출 관련 이벤트 구독
-            event_system.subscribe(Events.IMAGE_EXTRACTION_START,
-                                   self._on_image_extraction_start)
-            event_system.subscribe(Events.IMAGE_EXTRACTION_PROGRESS,
-                                   self.update_progress)
+            # 추출 완료 이벤트 구독
+            event_system.subscribe(Events.VIDEO_EXTRACTION_COMPLETE,
+                                   self._show_extraction_success)
             event_system.subscribe(Events.IMAGE_EXTRACTION_COMPLETE,
-                                   self.update_progress)
-            event_system.subscribe(Events.IMAGE_EXTRACTION_ERROR,
-                                   self._show_image_extraction_error)
-
-            # 오디오 추출 관련 이벤트 구독
-            event_system.subscribe(Events.AUDIO_EXTRACTION_START,
-                                   self._on_audio_extraction_start)
-            event_system.subscribe(Events.AUDIO_EXTRACTION_PROGRESS,
-                                   self.update_progress)
+                                   self._show_extraction_success)
             event_system.subscribe(Events.AUDIO_EXTRACTION_COMPLETE,
-                                   self.update_progress)
-            event_system.subscribe(Events.AUDIO_EXTRACTION_ERROR,
-                                   self._show_audio_extraction_error)
+                                   self._show_extraction_success)
+
+            # 추출 시작 이벤트 구독 제거됨 - 직접 호출로 변경
 
         except Exception as e:
             print(f"이벤트 리스너 설정 중 오류: {str(e)}")
+
+    def _setup_cancel_button_listeners(self):
+        """취소 버튼 상태 관리용 이벤트 리스너 설정"""
+        # 추출 완료/취소/에러 시 취소 버튼 비활성화
+        event_system.subscribe(Events.VIDEO_EXTRACTION_COMPLETE,
+                               self._disable_cancel_button)
+        event_system.subscribe(Events.VIDEO_EXTRACTION_ERROR,
+                               self._disable_cancel_button)
+
+        event_system.subscribe(
+            Events.IMAGE_EXTRACTION_COMPLETE, self._disable_cancel_button)
+        event_system.subscribe(
+            Events.IMAGE_EXTRACTION_ERROR, self._disable_cancel_button)
+
+        event_system.subscribe(
+            Events.AUDIO_EXTRACTION_COMPLETE, self._disable_cancel_button)
+        event_system.subscribe(
+            Events.AUDIO_EXTRACTION_ERROR, self._disable_cancel_button)
+
+    # ===== 취소 버튼 상태 관리 =====
+
+    def _enable_cancel_button(self):
+        """취소 버튼 활성화"""
+        if hasattr(self, 'cancel_button'):
+            self.cancel_button.config(state=tk.NORMAL)
+
+    def _disable_cancel_button(self, **kwargs):
+        """취소 버튼 비활성화"""
+        if hasattr(self, 'cancel_button'):
+            self.cancel_button.config(state=tk.DISABLED)

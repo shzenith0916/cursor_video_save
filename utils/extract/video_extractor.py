@@ -26,7 +26,7 @@ class VideoExtractor:
 
     @staticmethod
     def extract_segment(input_video_path, output_video_path, start_time, end_time,
-                        progress_callback=None, ffmpeg_executable='ffmpeg'):
+                        progress_callback=None, ffmpeg_executable='ffmpeg', cancel_event=None):
         try:
             if not os.path.exists(input_video_path):
                 return {
@@ -76,11 +76,12 @@ class VideoExtractor:
                 f"Invalid time format 지원하지 않는 시간 형식: {type(time_value)}")
 
     @staticmethod
-    def execute_command(command):
+    def execute_command(command, cancel_event=None):
         try:
             command_str = ' '.join(command)
             print(f"Executing FFmpeg command: {command_str}")
 
+            # 취소 기능이 필요 없으면 기존 subprocess.run 사용 (빠름)
             result = subprocess.run(
                 command,
                 check=True,
@@ -88,13 +89,12 @@ class VideoExtractor:
                 text=True,
                 encoding='utf-8',
                 errors='ignore',
-                timeout=300
-            )
-
+                timeout=300)
             print(f"FFmpeg 출력: {result.stdout}")
             if result.stderr:
                 print(f"FFmpeg 경고: {result.stderr}")
 
+            # FFmpeg가 성공적으로 완료되면 성공 결과 반환
             return {
                 'success': True,
                 'message': "비디오 세그먼트 추출 성공",

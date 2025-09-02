@@ -56,40 +56,37 @@ class Events:
     SEGMENT_END_SET = "segment_end_set"  # 구간 종료 시간 설정
     SEGMENT_SAVED = "segment_saved"  # 구간 저장
     SEGMENT_DELETED = "segment_deleted"  # 구간 삭제
-    SEGMENT_SELECTED = "segment_selected"  # 구간 선택
 
     # UI 관련 이벤트
     UI_UPDATE = "ui_update"  # UI 업데이트
     TAB_CHANGED = "tab_changed"  # 탭 변경
     PLAYER_STATE_CHANGED = "player_state_changed"  # 플레이어 상태 변경
 
-    # 추출 관련 이벤트
-    EXTRACTION_START = "extraction_start"  # 추출 시작
-    EXTRACTION_PROGRESS = "extraction_progress"  # 추출 진행 상태
-    EXTRACTION_COMPLETE = "extraction_complete"  # 추출 완료
-    EXTRACTION_ERROR = "extraction_error"  # 추출 오류
-    EXTRACTION_CANCEL = "extraction_cancel"  # 추출 취소 (매니저 방송)
-    EXTRACTION_CANCEL_REQUEST = "extraction_cancel_request"  # 추출 취소 요청 (UI 버튼)
+    # 비디오 추출 관련 이벤트
+    VIDEO_EXTRACTION_COMPLETE = "video_extraction_complete"  # 비디오 추출 완료
+    VIDEO_EXTRACTION_ERROR = "video_extraction_error"  # 비디오 추출 오류
 
     # 이미지 추출 관련 이벤트
-    IMAGE_EXTRACTION_START = "image_extraction_start"  # 이미지 추출 시작
-    IMAGE_EXTRACTION_PROGRESS = "image_extraction_progress"  # 이미지 추출 진행
     IMAGE_EXTRACTION_COMPLETE = "image_extraction_complete"  # 이미지 추출 완료
     IMAGE_EXTRACTION_ERROR = "image_extraction_error"  # 이미지 추출 오류
 
     # 오디오 추출 관련 이벤트
-    AUDIO_EXTRACTION_START = "audio_extraction_start"  # 오디오 추출 시작
-    AUDIO_EXTRACTION_PROGRESS = "audio_extraction_progress"  # 오디오 추출 진행
     AUDIO_EXTRACTION_COMPLETE = "audio_extraction_complete"  # 오디오 추출 완료
     AUDIO_EXTRACTION_ERROR = "audio_extraction_error"  # 오디오 추출 오류
+
+    # 추출 취소 이벤트
+    EXTRACTION_CANCEL = "extraction_cancel"  # 추출 취소
+
+    # 프로그래스 업데이트 이벤트
+    PROGRESS_UPDATE = "progress_update"  # 프로그래스 업데이트
 
     # VLC 관련 이벤트
     VLC_TIME_CHANGED = "vlc_time_changed"  # 비디오 시간 변경
     VLC_LENGTH_CHANGED = "vlc_length_changed"  # 비디오 길이 변경
 
-    # 새로운 구조 관련 이벤트
-    SEGMENT_CHANGED = "segment_changed"  # 구간 변경
-    SEGMENT_ADDED = "segment_added"  # 구간 추가
-    SEGMENT_REMOVED = "segment_removed"  # 구간 제거
-    SEGMENT_UPDATED = "segment_updated"  # 구간 업데이트
-    SEGMENTS_CLEARED = "segments_cleared"  # 구간 초기화
+    # # 새로운 구조 관련 이벤트
+    # SEGMENT_CHANGED = "segment_changed"  # 구간 변경
+    # SEGMENT_ADDED = "segment_added"  # 구간 추가
+    # SEGMENT_REMOVED = "segment_removed"  # 구간 제거
+    # SEGMENT_UPDATED = "segment_updated"  # 구간 업데이트
+    # SEGMENTS_CLEARED = "segments_cleared"  # 구간 초기화

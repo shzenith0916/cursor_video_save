@@ -1,19 +1,16 @@
+import os
 import tkinter as tk
 import ttkbootstrap as ttk  # ttkbootstrap으로 변경
 from ttkbootstrap.constants import *  # Bootstrap 스타일 상수들
 from tkinter import font
 from tkinter import messagebox
+from tkinter import filedialog
 
 from utils.ui_utils import UiUtils
 from .base_tab import BaseTab
-import os
 from utils.utils import VideoUtils
 from utils.styles import AppStyles
 from utils.event_system import event_system, Events
-from .command_handlers import MainTabCommandHandler
-from .command_handlers import NewTabCommandHandler
-from .command_handlers import SegmentTableCommandHandler
-from tkinter import filedialog
 
 
 class MainTab(BaseTab):
@@ -35,14 +32,8 @@ class MainTab(BaseTab):
         self.korean_font = AppStyles.get_korean_font()
 
         self._init_variables()  # MainTab 전용 변수 초기화
-
-        # 메인탭 Command handler 초기화
-        self.main_command_handler = MainTabCommandHandler(app)
-        # command_handler에 main_tab 참조 설정
-        self.main_command_handler.set_main_tab(self)
-
         self.create_ui()  # MainTab UI 생성
-        self.setup_event_listeners()
+        self.setup_event_listeners()  # 이벤트 리스너 설정
 
         # 추가로 확인할 수 있는 코드 (디버깅 용도)
         print(f"MainTab frame created: {self.frame}")
@@ -115,7 +106,7 @@ class MainTab(BaseTab):
 
         self.video_select_button = ttk.Button(
             self.openfile_frame, text="파일 선택", style="InfoLarge.TButton",
-            command=self.main_command_handler.on_file_select)
+            command=self.on_file_select)
         self.video_select_button.grid(row=0, column=2, padx=(0, 5))
 
         self.info_frame = ttk.Frame(self.top_frame)
@@ -132,6 +123,36 @@ class MainTab(BaseTab):
         self.video_info_label = ttk.Label(
             self.info_frame, text="", font=(self.korean_font, 10), foreground="gray", anchor="w", justify="left")
         self.video_info_label.pack(fill=tk.X, expand=True, padx=5, pady=5)
+
+    def on_file_select(self):
+        """파일 선택 버튼 클릭 시 파일 선택 대화상자 표시"""
+        print(f"[main_tab.py] event_system id: {id(event_system)}")
+        file_path = filedialog.askopenfilename(
+            title="비디오 파일 선택창",
+            filetypes=[
+                ("Video Files", "*.mp4"),
+                ("Video Files", "*.avi"),
+                ("Video Files", "*.mkv"),
+                ("Video Files", "*.mov"),
+                ("Video Files", "*.wmv"),
+                ("All Files", "*.*")
+            ]
+        )
+        if file_path:
+            self.video_path_var.set(file_path)
+            # 새 비디오 로드 시 플래그 리셋 (버튼 활성화 위해서)
+            self._video_info_updated = False
+
+            # 파일 경로를 app에 직접 설정
+            self.app.video_path = file_path
+
+            # 비디오 로드 이벤트 발생
+            event_system.emit(Events.VIDEO_LOADED, path=file_path)
+
+            print(f"Main Tab: 파일 선택 완료 - {file_path}")
+
+        else:
+            print("Main Tab: 파일 선택 취소됨")
 
     def create_video_frame(self):
         """비디오 프레임 생성"""
@@ -253,15 +274,23 @@ class MainTab(BaseTab):
 
         self.play_button = ttk.Button(control_buttons_subframe, text="► 재생",
                                       style="PlayOutline.TButton",
-                                      command=self.main_command_handler.on_play_click, width=12,
+                                      command=self.on_play_click, width=12,
                                       state=tk.DISABLED)
         self.play_button.pack(side=tk.LEFT, padx=10, pady=2)
 
         self.stop_button = ttk.Button(control_buttons_subframe, text="■ 정지",
                                       style="StopOutline.TButton",
-                                      command=self.main_command_handler.on_stop_click, width=12,
+                                      command=self.on_stop_click, width=12,
                                       state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=10, pady=2)
+
+    def on_play_click(self):
+        """재생 버튼 클릭 시 플레이어 상태 변경 이벤트 발생"""
+        event_system.emit(Events.VIDEO_PLAY_TOGGLE)
+
+    def on_stop_click(self):
+        """정지 버튼 클릭 시 플레이어 상태 변경 이벤트 발생"""
+        event_system.emit(Events.VIDEO_STOP)
 
     def create_interval_section(self):  # <- create_edit_section 에서 이름 변경
         """구간의 시작 시간, 끝 시간 설정 섹션 (interval_frame 내에 배치)"""
@@ -279,7 +308,7 @@ class MainTab(BaseTab):
         self.set_start_button = ttk.Button(self.interval_frame,
                                            text="시작 지점 설정",
                                            style='PastelGreenOutline.TButton',
-                                           command=self.main_command_handler.on_set_start_click,
+                                           command=self.on_set_start_click,
                                            state=tk.DISABLED)
         self.set_start_button.grid(row=0, column=1, sticky="w", pady=(0, 3))
 
@@ -292,7 +321,7 @@ class MainTab(BaseTab):
         self.set_end_button = ttk.Button(self.interval_frame,
                                          text="종료 지점 설정",
                                          style='PastelGreenOutline.TButton',
-                                         command=self.main_command_handler.on_set_end_click,
+                                         command=self.on_set_end_click,
                                          state=tk.DISABLED)
         self.set_end_button.grid(row=1, column=1, sticky="w", pady=(3, 10))
 
@@ -304,14 +333,34 @@ class MainTab(BaseTab):
         help_label.grid(row=2, column=0, columnspan=2,
                         sticky="w", pady=(10, 0))
 
-    # <- create_save_button 및 create_preview_button 통합
+    def on_set_start_click(self):
+        """시작 지점 설정 버튼 클릭 시"""
+        # VLC 플레이어의 실제 재생 시간을 구간 시작 시간으로 사용
+        if hasattr(self.app, 'vlc_player') and self.app.vlc_player:
+            current_time = self.app.vlc_player.get_position()
+        else:
+            # VLC 플레이어가 없으면 슬라이더 위치 사용
+            current_time = self.app.position_slider.get()
+        event_system.emit(Events.SEGMENT_START_SET, time=current_time)
+
+    def on_set_end_click(self):
+        """종료 지점 설정 버튼 클릭 시"""
+        # VLC 플레이어의 실제 재생 시간을 구간 종료 시간으로 사용
+        if hasattr(self.app, 'vlc_player') and self.app.vlc_player:
+            current_time = self.app.vlc_player.get_position()
+        else:
+            # VLC 플레이어가 없으면 슬라이더 위치 사용
+            current_time = self.app.position_slider.get()
+        event_system.emit(Events.SEGMENT_END_SET, time=current_time)
+
+    # create_save_button 및 create_preview_button 통합
     def create_save_action_section(self):
         """구간 저장 및 미리보기 버튼 (save_action_frame 내에 배치)"""
         self.save_segment_button = ttk.Button(
             self.save_action_frame,
             text="구간 저장",
             style='2Pastel.TButton',
-            command=self.main_command_handler.on_save_segment_click
+            command=self.on_save_segment_click
         )
         self.save_segment_button.pack(
             pady=(10, 5), padx=5, fill=tk.X, expand=True)
@@ -320,12 +369,26 @@ class MainTab(BaseTab):
             self.save_action_frame,
             text="선택구간 미리보기",
             style='3Pastel.TButton',
-            command=self.main_command_handler.on_preview_click
+            command=self.on_preview_click
         )
         self.preview_button.pack(pady=5, padx=5, fill=tk.X, expand=True)
 
-    # UI 업데이트 이벤트 리스너
+    def on_preview_click(self):
+        """선택구간 미리보기 버튼 클릭 시"""
+        # 구간 유효성 검사 후 미리보기 실행
+        if hasattr(self.app, 'start_time') and hasattr(self.app, 'end_time') and \
+           self.app.start_time < self.app.end_time:
+            self.app.preview_selection()
 
+    def on_save_segment_click(self):
+        """구간 저장 버튼 클릭 시"""
+        saved_segment = self.app.save_current_segment()
+        if saved_segment:  # None이 아니면 (즉, 저장이 성공하면)
+            event_system.emit(Events.SEGMENT_SAVED, **saved_segment)
+
+# ====================================
+    # UI 업데이트 이벤트 리스너
+# ====================================
     def _on_ui_update(self, **kwargs):  # 함수의 매개변수로 여러 개의 키-값 쌍을 전달, Dict 형태로 전달
         """UI 업데이트 이벤트 처리"""
         component = kwargs.get('component', '')

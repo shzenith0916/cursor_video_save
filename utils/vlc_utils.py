@@ -2,6 +2,7 @@ import vlc
 import os
 import sys
 import threading
+import queue
 import time
 import platform
 from .event_system import event_system, Events
@@ -82,23 +83,35 @@ class VLCPlayer:
     """VLC 플레이어"""
 
     def __init__(self):
+
+        # VLC 인스턴스 생성 - 하드웨어 가속 비활성화로 에러 방지
         try:
-            # VLC 인스턴스 생성 (옵션 없이)
-            self.vlc_instance = vlc.Instance()
-            if not self.vlc_instance:
-                raise Exception("VLC 인스턴스가 None을 반환")
+            # 하드웨어 가속 비활성화 옵션 추가 -> 콘솔에 h264코드로 버퍼, 쓰레드 버퍼, 디코딩딩 등의 에러가 발생해서 추가
+            vlc_args = [
+                '--no-hwdec',  # 하드웨어 디코딩 비활성화
+                '--no-avcodec-hw',  # avcodec 하드웨어 가속 비활성화
+                '--no-video-deco',  # 비디오 디코딩 가속 비활성화
+                '--no-overlay',  # 오버레이 비활성화
+                '--quiet',  # 콘솔 출력 최소화
+            ]
 
-            print("VLC 인스턴스 생성 성공")
-
+            self.vlc_instance = vlc.Instance(vlc_args)
+            print("VLC 인스턴스 생성 성공 (하드웨어 가속 비활성화)")
             self.media_player = self.vlc_instance.media_player_new()
-            if not self.media_player:
-                raise Exception("VLC 미디어 플레이어가 None을 반환")
-
             print("VLC 미디어 플레이어 생성 성공")
         except Exception as e:
-            print(f"VLC 초기화 실패: {e}")
-            self.vlc_instance = None
-            self.media_player = None
+            print(f"VLC 인스턴스생성/초기화 실패: {e}")
+            # 옵션 없이 다시 시도
+            try:
+                print("VLC 옵션 없이 재시도...")
+                self.vlc_instance = vlc.Instance()
+                print("VLC 인스턴스 생성 성공 (기본 옵션)")
+                self.media_player = self.vlc_instance.media_player_new()
+                print("VLC 미디어 플레이어 생성 성공")
+            except Exception as e2:
+                print(f"VLC 기본 옵션으로도 초기화 실패: {e2}")
+                self.vlc_instance = None
+                self.media_player = None
 
         self.video_widget = None  # 나중에 연결
 
@@ -131,7 +144,47 @@ class VLCPlayer:
         else:
             print("미디어가 아직 로드되지 않음, 나중에 임베딩됨")
 
-    def load_video(self, video_path):
+    def _parse_media_non_blocking(self, timeout_ms: int = 1000) -> None:
+        """동기 parse() 대신 비동기/타임아웃 파싱을 시도한다."""
+        try:
+            if not self.media:
+                return
+            if hasattr(self.media, 'parse_with_options') and hasattr(vlc, 'MediaParseFlag'):
+                self.media.parse_with_options(
+                    vlc.MediaParseFlag.local, timeout_ms)
+            elif hasattr(self.media, 'parse_async'):
+                self.media.parse_async()
+            # 구버전 동기 parse()는 의도적으로 사용하지 않음
+        except Exception:
+            pass
+
+    def _update_duration_with_fallback(self) -> None:
+        """duration을 파악한다. 파싱 실패 시 짧게 재생하여 길이를 확보한다."""
+        try:
+            if not self.media:
+                return
+            duration_ms = self.media.get_duration()
+            if duration_ms and duration_ms > 0:
+                self.duration = duration_ms / 1000
+                print(f"VLC 로드: 파싱으로 길이 정보 획득 - {self.duration}초")
+                return
+
+            print("VLC 로드: 파싱 실패, 최소 재생으로 길이 정보 획득 시도")
+            if self.video_widget and self.media_player:
+                self.media_player.play()
+
+                def stop_after_delay():
+                    time.sleep(0.1)
+                    self.media_player.stop()
+                    print("VLC 로드: 길이 정보 로드 완료, 정지")
+
+                threading.Thread(target=stop_after_delay, daemon=True).start()
+                self.duration = 0
+        except Exception as e:
+            print(f"VLC 로드: 길이 정보 획득 실패 - {e}")
+            self.duration = 0
+
+    def load_video(self, video_path, start_time: float = None, end_time: float = None):
         """비디오 로드"""
         if not self.vlc_instance or not self.media_player:
             print("VLC 인스턴스가 초기화되지 않았습니다.")
@@ -157,13 +210,20 @@ class VLCPlayer:
                 print("미디어 객체 생성 실패")
                 return False
 
+            # 구간 재생 옵션 적용 (초 단위)
+            try:
+                if start_time is not None:
+                    self.media.add_option(f":start-time={float(start_time)}")
+                if end_time is not None:
+                    self.media.add_option(f":stop-time={float(end_time)}")
+            except Exception:
+                # 옵션 적용 실패는 치명적이지 않으므로 무시 (모니터링 로직이 보완)
+                pass
+
             self.media_player.set_media(self.media)
 
-            # 볼륨 설정
-            self.media_player.audio_set_volume(self.volume)
-
-            # 미디어 파싱 및 길이 정보 업데이트 (재생하지 않고)
-            self.media.parse()
+            # 비동기/타임아웃 파싱으로 메타만 획득
+            self._parse_media_non_blocking(timeout_ms=1000)
 
             # 비디오 위젯이 설정되어 있다면 임베딩
             if self.video_widget:
@@ -179,35 +239,8 @@ class VLCPlayer:
             else:
                 print(f"VLC 로드: 비디오 위젯이 설정되지 않음")
 
-            # 미디어 길이 정보 업데이트 (재생하지 않고 파싱만으로)
-            try:
-                # 미디어 파싱으로 길이 정보 시도
-                duration_ms = self.media.get_duration()
-                if duration_ms > 0:
-                    self.duration = duration_ms / 1000
-                    print(f"VLC 로드: 파싱으로 길이 정보 획득 - {self.duration}초")
-                else:
-                    # 파싱 실패 시에만 최소한의 재생으로 정보 획득
-                    print("VLC 로드: 파싱 실패, 최소 재생으로 길이 정보 획득 시도")
-                    if self.video_widget:  # 임베딩된 경우에만
-                        self.media_player.play()
-                        # 매우 짧은 시간만 대기
-                        import threading
-
-                        def stop_after_delay():
-                            time.sleep(0.1)  # 0.3초 → 0.1초로 단축
-                            self.media_player.stop()
-                            print("VLC 로드: 길이 정보 로드 완료, 정지")
-
-                        # 별도 스레드에서 정지 처리
-                        threading.Thread(
-                            target=stop_after_delay, daemon=True).start()
-
-                        # 메인 스레드는 즉시 진행
-                        self.duration = 0  # 일단 0으로 설정, 나중에 업데이트
-            except Exception as e:
-                print(f"VLC 로드: 길이 정보 획득 실패 - {e}")
-                self.duration = 0
+            # 길이 정보 업데이트 (폴백 포함)
+            self._update_duration_with_fallback()
 
             print(f"VLC 비디오 로드 완료: {video_path}")
             return True
@@ -269,7 +302,9 @@ class VLCPlayer:
             else:
                 print("VLC: 경고 - 임베딩되지 않은 상태에서 재생 시도")
 
+            # 단순하게 재생 시작
             self.media_player.play()
+
             self.is_playing = True
             event_system.emit(Events.PLAYER_STATE_CHANGED,
                               is_playing=True, is_stopped=False)
@@ -334,7 +369,9 @@ class VLCPlayer:
             if not self.media:
                 return None
 
-            self.media.parse()
+            # self.media_parse()
+            # 동기 파싱은 피하고, 가능한 옵션만 사용
+            self._parse_media_non_blocking(timeout_ms=500)
             tracks = self.media.tracks_get()
 
             video_info = {

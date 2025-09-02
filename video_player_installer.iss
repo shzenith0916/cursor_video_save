@@ -26,7 +26,7 @@ Name: "desktopicon"; Description: "바탕화면 바로가기 생성"; GroupDescr
 Name: "quicklaunchicon"; Description: "빠른 실행 바로가기 생성"; GroupDescription: "추가 아이콘:"
 
 [Files]
-Source: "build\video_player\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\videoplayer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "EULA.txt"; DestDir: "{app}"
 Source: "INSTALL.md"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -104,15 +104,13 @@ begin
 
       MsgBox('✓ 설치 완료!' + #13#10#13#10 +
              '✓ 비디오 재생: 즉시 사용 가능' + #13#10 +
-             ' • 추출 기능: FFmpeg 설치 후 사용 가능' + #13#10#13#10 +
-             '자세한 설치 가이드는 시작 메뉴 > VideoPlayer > 설치 가이드를 참고하세요.',
+             ' • 추출 기능: FFmpeg 설치 후 사용 가능',
              mbInformation, MB_OK);
     end else
     begin
       MsgBox('✓ 설치 완료!' + #13#10#13#10 +
              '✓ VLC 미디어 라이브러리: 내장됨' + #13#10 +
-             '✓ FFmpeg: 설치됨' + #13#10#13#10 +
-             '모든 기능을 바로 사용할 수 있습니다!',
+             '• FFmpeg를 이용한 추출 기능은 FFmpeg 설치 후 사용 가능',
              mbInformation, MB_OK);
     end;
   end;
