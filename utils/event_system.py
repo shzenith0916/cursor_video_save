@@ -10,7 +10,12 @@ class EventSystem:
 
     def subscribe(self, event_name: str, callback: Callable) -> None:
         """이벤트 구독"""
-        self._listeners[event_name].append(callback)
+        # 중복 구독 방지
+        if callback not in self._listeners[event_name]:  # 이미 구독되어 있는지 확인
+            self._listeners[event_name].append(callback)  # 없으면 추가
+        else:
+            # 있으면 경고
+            print(f"⚠️ 중복 구독 방지: {event_name} -> {callback.__name__}")
 
     def unsubscribe(self, event_name: str, callback: Callable) -> None:
         """이벤트 구독 해제"""
@@ -74,19 +79,9 @@ class Events:
     AUDIO_EXTRACTION_COMPLETE = "audio_extraction_complete"  # 오디오 추출 완료
     AUDIO_EXTRACTION_ERROR = "audio_extraction_error"  # 오디오 추출 오류
 
-    # 추출 취소 이벤트
-    EXTRACTION_CANCEL = "extraction_cancel"  # 추출 취소
-
     # 프로그래스 업데이트 이벤트
     PROGRESS_UPDATE = "progress_update"  # 프로그래스 업데이트
 
     # VLC 관련 이벤트
     VLC_TIME_CHANGED = "vlc_time_changed"  # 비디오 시간 변경
     VLC_LENGTH_CHANGED = "vlc_length_changed"  # 비디오 길이 변경
-
-    # # 새로운 구조 관련 이벤트
-    # SEGMENT_CHANGED = "segment_changed"  # 구간 변경
-    # SEGMENT_ADDED = "segment_added"  # 구간 추가
-    # SEGMENT_REMOVED = "segment_removed"  # 구간 제거
-    # SEGMENT_UPDATED = "segment_updated"  # 구간 업데이트
-    # SEGMENTS_CLEARED = "segments_cleared"  # 구간 초기화

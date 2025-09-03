@@ -149,7 +149,8 @@ def create_spec_file():
 
     # VLC 데이터 경로 추가
     datas_section += f""",
-        (r'{vlc_path}\\plugins', 'plugins')"""
+        (r'{vlc_path}\\plugins', 'plugins'),
+        ('app.py', '.')"""
 
     spec_content = textwrap.dedent(f"""\
         # -*- mode: python ; coding: utf-8 -*-

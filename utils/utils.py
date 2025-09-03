@@ -9,10 +9,11 @@ from ttkbootstrap.constants import *
 from .ui_utils import UiUtils
 from .event_system import event_system, Events
 import time
+import platform
 
 
 def _parse_time_to_seconds(time_str):
-    """시간 문자열을 초 단위로 변환 (HH:MM:SS 형식)"""
+    """시간 문자열을 초 단위로 변환 (HH:MM:SS 형식) - app.py에서 사용"""
     try:
         if not time_str:
             return None
@@ -37,7 +38,7 @@ def _parse_time_to_seconds(time_str):
 
 
 def show_custom_messagebox(parent, title, message, msg_type="info", auto_close_ms=None):
-    """커스텀 Toplevel 메시지 박스 생성"""
+    """커스텀 Toplevel 메시지 박스 생성 - ffmpeg_manager.py에서 사용"""
     dialog = tk.Toplevel(parent)
     dialog.title(title)
 
@@ -111,40 +112,6 @@ class VideoUtils:
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     @staticmethod
-    def convert_frame_to_photo(frame):
-        """OpenCV 프레임을 Tkinter PhotoImage로 변환.
-           비디오 프레임에서 이 이미지를 이용하여 재생"""
-
-        try:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(frame_rgb)
-            return ImageTk.PhotoImage(image=pil_image)
-        except Exception as e:
-            print(f"Frame conversion error: {e}")
-            return None
-
-    @staticmethod
-    def convert_frame_to_photo_optimized(frame, target_width=None, target_height=None):
-        """최적화된 OpenCV 프레임을 Tkinter PhotoImage로 변환"""
-        try:
-            # BGR -> RGB 변환
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(frame_rgb)
-
-            # PIL 이미지 생성
-            # 📌 타겟 크기가 지정된 경우 리사이즈
-            if target_width and target_height:
-                # 비율 유지하면서 리사이즈
-                pil_img.thumbnail((target_width, target_height),
-                                  Image.Resampling.LANCZOS)
-
-            return ImageTk.PhotoImage(pil_img)
-
-        except Exception as e:
-            print(f"Frame Conversion Error: {e}")
-            return None
-
-    @staticmethod
     def get_opencv_video_info(video_path):
         """OpenCV로 비디오 정보 가져오기 - 메인탭 오른쪽 상단 정보 표시"""
         try:
@@ -168,27 +135,15 @@ class VideoUtils:
             return None
 
     @staticmethod
-    def update_video_ui_components(video_info, ui_components):
-        """UI 컴포넌트 업데이트"""
-        try:
-            if video_info and hasattr(ui_components, 'video_info_label'):
-                info_text = f"길이: {VideoUtils.format_time(int(video_info['duration']))}\n"
-                info_text += f"해상도: {video_info['width']}x{video_info['height']}\n"
-                info_text += f"FPS: {video_info['fps']:.1f}"
-                ui_components.video_info_label.config(text=info_text)
-        except Exception as e:
-            print(f"UI 업데이트 실패: {e}")
-
-    @staticmethod
     def get_video_path_from_app(app_instance):
-        """앱에서 비디오 경로 가져오기"""
+        """앱에서 비디오 경로 가져오기 - app.py에서 사용"""
         if hasattr(app_instance, 'video_path'):
             return app_instance.video_path
         return None
 
     @staticmethod
     def get_file_info(file_path):
-        """파일 정보 가져오기 - new_tab/추출탭의 중간 프레임 부분분"""
+        """파일 정보 가져오기 - new_tab/추출탭의 중간 프레임 부분"""
         try:
             cap = cv2.VideoCapture(file_path)
             if not cap.isOpened():
@@ -217,17 +172,38 @@ class VideoUtils:
             return None, f"파일 정보 오류: {str(e)}"
 
     @staticmethod
-    def create_video_label(parent_frame):
-        """비디오 레이블 생성"""
-        if parent_frame:
-            video_label = tk.Label(parent_frame)
-            video_label.pack(expand=True, fill="both")
-            return video_label
-        return None
+    def get_file_info(file_path):
+        """파일 정보 가져오기 - new_tab/추출탭의 중간 프레임 부분"""
+        try:
+            cap = cv2.VideoCapture(file_path)
+            if not cap.isOpened():
+                return None, "비디오 파일을 열 수 없습니다."
+
+            props = {
+                'fps': cap.get(cv2.CAP_PROP_FPS),
+                'frame_count': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+                'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                'length': cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)
+            }
+
+            file_stats = os.stat(file_path)
+            file_info = {
+                'video_props': props,
+                'file_name': os.path.basename(file_path),
+                'file_path': file_path,
+                'file_size': f"{file_stats.st_size / (1024*1024):.1f} MB"
+            }
+
+            cap.release()
+            return file_info, None
+
+        except Exception as e:
+            return None, f"파일 정보 오류: {str(e)}"
 
     @staticmethod
     def find_input_file(filename, app_instance):
-        """입력 파일 경로 찾기 (공통 메서드)
+        """입력 파일 경로 찾기 (공통 메서드) - new_tab.py, extract_manager.py에서 사용
 
         Args:
             filename (str): 파일명 또는 전체 경로
@@ -256,7 +232,7 @@ class VideoUtils:
 
     @staticmethod
     def get_default_save_path():
-        """기본 저장 경로 가져오기 (바탕화면 또는 문서 폴더)"""
+        """기본 저장 경로 가져오기 (바탕화면 또는 문서 폴더) - extract_manager.py에서 사용"""
         default_path = os.path.expanduser("~/Desktop")
         if not os.path.exists(default_path):
             default_path = os.path.expanduser("~/Documents")

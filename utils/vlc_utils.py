@@ -356,8 +356,8 @@ class VLCPlayer:
         if self.media_player:
             # 내부 current_time 변수를 우선적으로 사용
             if hasattr(self, 'current_time') and self.current_time is not None:
-                print(
-                    f"DEBUG: VLC get_position - 내부 current_time 사용: {self.current_time}초")
+                # 프린트문이 미리보기 창에서 재생시 콘솔에 계속 찍히므로, 디버깅 용으로만 사용. 사용안할때는 주석처리.
+                # print(f"DEBUG: VLC get_position - 내부 current_time 사용: {self.current_time}초")
                 return self.current_time
 
             # 내부 변수가 없으면 VLC에서 직접 가져오기
@@ -453,7 +453,8 @@ class VLCPlayer:
         try:
             new_time = self.media_player.get_time() / 1000
             self.current_time = new_time
-            print(f"DEBUG: VLC 시간 변경 이벤트 - current_time 업데이트: {new_time}초")
+            # 프린트문이 플레이서 실행시 계속 찍히므로, 디버깅 용으로만 사용. 사용안할때는 주석처리.
+            # print(f"DEBUG: VLC 시간 변경 이벤트 - current_time 업데이트: {new_time}초")
             event_system.emit(Events.VLC_TIME_CHANGED, time=new_time)
         except Exception as e:
             print(f"시간 변경 이벤트 처리 실패: {e}")

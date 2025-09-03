@@ -31,7 +31,6 @@ class NewTab(BaseTab):
 
         self.create_ui()  # NewTab UI 생성
         self._setup_event_listeners()  # 추출 관련 이벤트 리스너 설정
-        self._setup_cancel_button_listeners()  # 취소 버튼 상태 관리 리스너 설정
 
         # 앱에 NewTab 인스턴스 등록 (PreviewWindow에서 참조할 수 있도록)
         self.app.new_tab_instance = self
@@ -278,7 +277,7 @@ class NewTab(BaseTab):
             button_frame,
             text="작업 취소",
             style='3Pastel.TButton',
-            command=event_system.emit(Events.EXTRACTION_CANCEL),
+            command=self.on_extraction_cancel,  # 함수 참조로 수정
             state=tk.DISABLED  # 초기 상태: 비활성화
         )
         self.cancel_button.pack(pady=5, padx=5, fill=ttk.X, expand=True)
@@ -522,9 +521,11 @@ class NewTab(BaseTab):
             if hasattr(self.extraction_manager, '_cancel_all_extractions'):
                 self.extraction_manager._cancel_all_extractions()
 
-            # 취소 완료 처리, 메세지 표시
-            self._update_video_audio_progress(0, "취소됨")
-            messagebox.showinfo("추출 취소", "추출 작업이 취소되었습니다.")
+            # 취소 완료 다이얼로그 표시
+            messagebox.showinfo("작업 취소", "추출 작업이 취소되었습니다.")
+
+            # UI 업데이트 - 프로그레스바 초기화
+            self._update_video_audio_progress(0, "작업이 취소되었습니다.")
 
         except Exception as e:
             print(f"추출 취소 이벤트 발행 중 오류: {e}")
@@ -583,9 +584,13 @@ class NewTab(BaseTab):
 
     # ======= 추출 오류 메서드 =======
 
-    def _show_extraction_error(self, error, **kwargs):
+    # extract_manager.py에서 Events.IMAGE_EXTRACTION_ERROR, message=error_msg 로 message 파라미터였는데, error로 파라미터 전달하여 에러 발생했었음.
+    # message로 파라미터 수정 완료.
+    def _show_extraction_error(self, message, **kwargs):
         """추출 오류 메시지 표시 - 통합된 에러 처리"""
-        messagebox.showerror("오류", f"추출 중 오류 발생:\n{error}")
+        messagebox.showerror("오류", f"추출 중 오류 발생:\n{message}")
+        # 취소 버튼 비활성화
+        self._disable_cancel_button()
 
     def _show_extraction_success(self, extract_type, **kwargs):
         """추출 성공 메시지 표시 - 통합된 성공 처리"""
@@ -596,13 +601,20 @@ class NewTab(BaseTab):
             self._update_image_progress(100, extracted_count, extracted_count)
             messagebox.showinfo("성공", f"이미지 추출이 완료되었습니다!\n"
                                 f"총 {extracted_count}개 이미지 저장.\n"
-                                f"저장 위치치: {output_folder}")
+                                f"저장 위치: {output_folder}")
         else:
             # 진행률을 100%로 설정
             self._update_video_audio_progress(100, "추출 완료!")
             output_folder = kwargs.get('output_folder', '')
+            output_path = kwargs.get('output_path', '')
+            # output_folder가 없으면 output_path에서 추출
+            if not output_folder and output_path:
+                output_folder = os.path.dirname(output_path)
+
             messagebox.showinfo("성공", f"{extract_type} 추출이 완료되었습니다!\n"
                                 f"저장 위치: {output_folder}")
+            # 취소 버튼 비활성화
+            self._disable_cancel_button()
 
     # ===== 이벤트 리스너 설정 =====
 
@@ -629,28 +641,8 @@ class NewTab(BaseTab):
             event_system.subscribe(Events.AUDIO_EXTRACTION_COMPLETE,
                                    self._show_extraction_success)
 
-            # 추출 시작 이벤트 구독 제거됨 - 직접 호출로 변경
-
         except Exception as e:
             print(f"이벤트 리스너 설정 중 오류: {str(e)}")
-
-    def _setup_cancel_button_listeners(self):
-        """취소 버튼 상태 관리용 이벤트 리스너 설정"""
-        # 추출 완료/취소/에러 시 취소 버튼 비활성화
-        event_system.subscribe(Events.VIDEO_EXTRACTION_COMPLETE,
-                               self._disable_cancel_button)
-        event_system.subscribe(Events.VIDEO_EXTRACTION_ERROR,
-                               self._disable_cancel_button)
-
-        event_system.subscribe(
-            Events.IMAGE_EXTRACTION_COMPLETE, self._disable_cancel_button)
-        event_system.subscribe(
-            Events.IMAGE_EXTRACTION_ERROR, self._disable_cancel_button)
-
-        event_system.subscribe(
-            Events.AUDIO_EXTRACTION_COMPLETE, self._disable_cancel_button)
-        event_system.subscribe(
-            Events.AUDIO_EXTRACTION_ERROR, self._disable_cancel_button)
 
     # ===== 취소 버튼 상태 관리 =====
 

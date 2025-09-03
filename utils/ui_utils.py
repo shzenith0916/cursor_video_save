@@ -5,21 +5,6 @@ class UiUtils:
     """비디오 처리 관련 공통 기능을 제공하는 클래스"""
 
     @staticmethod
-    def get_scaling_factor(window):
-        """Tkinter 내부적으로 사용하는 스케일링 팩터, os에서 자동 조정
-           폰트 크기, 일부 위젯 자동스케일링 적용용"""
-
-        root = tk.Tk()
-        # Tkinter 내부의 스케일링 팩터(보통 1.0, 1.25, 1.5 등)를 반환
-        scaling = root.tk.call('tk', 'scaling')
-
-        # 창 닫기
-        root.destroy()  # DPI/Scaling 변경시 완전한 재시작 필요. 창을 닫아야 함.
-        # root.withdraw() # 창을 숨김. 메모리에는 남아있음
-
-        return scaling
-
-    @staticmethod
     def get_scaling_factor_by_dpi(window):
         """실제 dpi 기반 배율 반환: 픽셀 단위 크기 조정에 더 정확함
            버튼, 캔버스, 이미지 등 크기 조정"""
