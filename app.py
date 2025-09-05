@@ -234,18 +234,20 @@ class VideoEditorApp:
         return ui_components
 
     def set_start_time(self, time: float):
-        """시작 시간 지정 (이벤트 핸들러)"""
+        """시작 시간 지정 - 이벤트 데이터를 받아서 처리하는 이벤트 핸들러"""
         print(f"DEBUG: set_start_time 호출됨 - 받은 시간: {time}초")
         self.start_time = time
         print(f"DEBUG: self.start_time 설정됨: {self.start_time}초")
+        # UI 업데이트트
         self.start_time_label.config(
             text=f"구간 시작: {VideoUtils.format_time(int(self.start_time))}")
         print(
             f"DEBUG: UI 라벨 업데이트됨: {VideoUtils.format_time(int(self.start_time))}")
+        # 버튼 상태 관리리
         self.update_save_button_state()
 
     def set_end_time(self, time: float):
-        """종료 시간 지정 (이벤트 핸들러)"""
+        """종료 시간 지정 - 이벤트 데이터를 받아서 처리하는 이벤트 핸들러"""
         print(f"DEBUG: set_end_time 호출됨 - 받은 시간: {time}초")
         self.end_time = time
         print(f"DEBUG: self.end_time 설정됨: {self.end_time}초")
@@ -405,13 +407,13 @@ class VideoEditorApp:
         return True
 
     # save_current_segment 메서드에서 분리
-    def create_segment_data(self, video_path, start_time, end_time):
+    def create_segment_data(self, video_path, start_time, end_time, duration):
         """구간 데이터 생성 공통 메서드"""
         return {
             'file': os.path.basename(video_path),
             'start': start_time,
             'end': end_time,
-            'duration': end_time - start_time,
+            'duration': duration,
             'type': os.path.splitext(os.path.basename(video_path))[0][-2:],
             'opinion1': '',  # PAS 칼럼
             'opinion2': ''   # 잔여물 칼럼
@@ -446,9 +448,10 @@ class VideoEditorApp:
                 messagebox.showerror("오류", "비디오 파일이 선택되지 않았습니다.")
             return None
 
-        # 구간 데이터 생성
+        # 구간 데이터 생성 - 정확한 길이 계산
+        duration = self.end_time - self.start_time
         segment_data = self.create_segment_data(
-            video_path, self.start_time, self.end_time)
+            video_path, self.start_time, self.end_time, duration)
 
         # 구간 저장
         self.saved_segments.append(segment_data)
@@ -509,27 +512,54 @@ class VideoEditorApp:
             if not file_path:
                 return False, "파일 저장이 취소되었습니다."
 
-            with open(file_path, 'w', newline='', encoding='cp949') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(
-                    ['파일명', '시작 시간', '종료 시간', '구간 길이', '타입', '의견1', '의견2'])
+            # 윈도우 환경에서 더 안정적인 인코딩 사용
+            try:
+                with open(file_path, 'w', newline='', encoding='cp949') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(
+                        ['파일명', '시작 시간', '종료 시간', '구간 길이', '타입', '의견1', '의견2'])
 
-                for segment in self.saved_segments:
-                    filename = segment.get('file', '')
-                    type_value = os.path.splitext(
-                        filename)[0][-2:] if filename else ''
+                    for segment in self.saved_segments:
+                        filename = segment.get('file', '')
+                        type_value = os.path.splitext(
+                            filename)[0][-2:] if filename else ''
 
-                    writer.writerow([
-                        filename,
-                        VideoUtils.format_time(segment['start']),
-                        VideoUtils.format_time(segment['end']),
-                        VideoUtils.format_time(segment['duration']),
-                        type_value,
-                        segment.get('opinion1', ''),
-                        segment.get('opinion2', '')
-                    ])
+                        writer.writerow([
+                            filename,
+                            VideoUtils.format_time(segment['start']),
+                            VideoUtils.format_time(segment['end']),
+                            VideoUtils.format_time(segment['duration']),
+                            type_value,
+                            segment.get('opinion1', ''),
+                            segment.get('opinion2', '')
+                        ])
 
-            return True, f"데이터가 {os.path.basename(file_path)}에 저장되었습니다."
+                return True, f"데이터가 {os.path.basename(file_path)}에 저장되었습니다."
+
+            except UnicodeEncodeError:
+                # cp949로 저장 실패 시 UTF-8로 재시도
+                print("CP949 인코딩 실패, UTF-8로 재시도")
+                with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(
+                        ['파일명', '시작 시간', '종료 시간', '구간 길이', '타입', '의견1', '의견2'])
+
+                    for segment in self.saved_segments:
+                        filename = segment.get('file', '')
+                        type_value = os.path.splitext(
+                            filename)[0][-2:] if filename else ''
+
+                        writer.writerow([
+                            filename,
+                            VideoUtils.format_time(segment['start']),
+                            VideoUtils.format_time(segment['end']),
+                            VideoUtils.format_time(segment['duration']),
+                            type_value,
+                            segment.get('opinion1', ''),
+                            segment.get('opinion2', '')
+                        ])
+
+                return True, f"데이터가 {os.path.basename(file_path)}에 저장되었습니다. (UTF-8 인코딩)"
 
         except Exception as e:
             return False, f"파일 저장 중 오류가 발생했습니다: {str(e)}"
@@ -572,85 +602,125 @@ class VideoEditorApp:
         return filename
 
     def import_segments_from_csv(self, file_path):
-        """CSV 파일에서 구간 데이터 가져오기 - app에서 중앙화된 데이터 관리리"""
+        """CSV 파일에서 구간 데이터 가져오기 - app에서 중앙화된 데이터 관리"""
 
         try:
+            # 파일 경로 정규화 및 디버깅
+            original_path = file_path
+            file_path = os.path.normpath(file_path)  # 경로 정규화
+            print(f"CSV 가져오기 - 원본 경로: {original_path}")
+            print(f"CSV 가져오기 - 정규화된 경로: {file_path}")
+            print(f"CSV 가져오기 - 파일 존재 여부: {os.path.exists(file_path)}")
+            print(
+                f"CSV 가져오기 - 파일 크기: {os.path.getsize(file_path) if os.path.exists(file_path) else 'N/A'} bytes")
+
             if not os.path.exists(file_path):
-                return False, "CSV 파일을 찾을 수 없습니다."
+                return False, f"CSV 파일을 찾을 수 없습니다.\n경로: {file_path}"
 
             imported_segments = []
             error_count = 0
+            error_details = []
 
-            # 여러 인코딩 시도
-            encodings = ['utf-8', 'cp949', 'euc-kr']
+            # 여러 인코딩 시도 (cp949 우선 - 내보내기 형식과 일치)
+            encodings = ['cp949', 'utf-8', 'euc-kr',
+                         'utf-8-sig']  # BOM 포함 UTF-8 추가
             csvfile = None
+            successful_encoding = None
 
             for encod in encodings:
                 try:
+                    print(f"CSV 가져오기 - 인코딩 시도: {encod}")
                     csvfile = open(file_path, 'r', encoding=encod)
                     # 헤더를 자동으로 인식하여 딕셔너리 형태로 반환해줌.
                     reader = csv.DictReader(csvfile)
 
-                    # DictReader는 자동으로 첫 번째 행을 헤더로 인식하므로 next() 불필요
-                    # 2부터 시작 (헤더 제외)
-                    for row_num, row in enumerate(reader, start=2):
-                        try:
-                            # DictReader는 딕셔너리 형태로 반환하므로 키로 접근
-                            if not row.get('파일명') or not row.get('시작 시간') or not row.get('종료 시간'):
-                                error_count += 1
-                                continue
+                    # 첫 번째 행 읽기 시도
+                    first_row = next(reader, None)
+                    if first_row is None:
+                        print(f"CSV 가져오기 - {encod}: 파일이 비어있음")
+                        continue
 
-                            # 문자열로 들어가 있기 때문에 strip()으로 공백 제거
-                            start_time_str = row['시작 시간'].strip()
-                            end_time_str = row['종료 시간'].strip()
+                    print(f"CSV 가져오기 - {encod}: 첫 번째 행 읽기 성공")
+                    print(f"CSV 가져오기 - {encod}: 헤더: {list(first_row.keys())}")
 
-                            # 시간 문자열을 초 단위로 변환 (HH:MM:SS 형식)
-                            start_seconds = _parse_time_to_seconds(
-                                start_time_str)
-                            end_seconds = _parse_time_to_seconds(
-                                end_time_str)
+                    # 첫 번째 행을 다시 처리하기 위해 리셋
+                    csvfile.seek(0)
+                    reader = csv.DictReader(csvfile)
 
-                            if start_seconds is None or end_seconds is None:
-                                error_count += 1
-                                continue
-                            elif start_seconds >= end_seconds:
-                                error_count += 1
-                                continue
-
-                            # 구간 데이터 생성, app.py의 내부 데이터 구조는 400-410 라인 확인. UI테이블에서의 헤더더와 다름.
-                            segment_data = {
-                                'file': row['파일명'].strip(),
-                                'start': start_seconds,
-                                'end': end_seconds,
-                                'duration': end_seconds - start_seconds,
-                                # row.get을 이용해서 기본값 ''으로 안전한 처리, cvs 파일의 컬럼이 누락되어도 오류 없이 처리하기 위함
-                                'opinion1': row.get('의견1', '').strip(),
-                                'opinion2': row.get('의견2', '').strip()
-                            }
-
-                            imported_segments.append(segment_data)
-
-                        except Exception as e:
-                            error_count += 1
-                            print(f"CSV 행 {row_num} 처리 중 오류: {e}")
-                            continue
-
-                    # 성공적으로 읽었으면 루프 종료 (파일이 열린채로 있음. finally 블록에서 닫음.)
+                    successful_encoding = encod
                     break
 
                 except UnicodeDecodeError:
-                    # 현재 인코딩으로 실패하면 다음 인코딩 시도
-                    if csvfile:  # 파일이 열려있으면
-                        csvfile.close()  # 파일 닫기
-                    continue  # except 블록이 아닌 for 루프의 다음 반복으로 이동
-                except Exception as e:
-                    # 기타 오류는 즉시 중단
+                    print(f"CSV 가져오기 - {encod}: 인코딩 오류")
                     if csvfile:
                         csvfile.close()
-                    return False, f"CSV 파일 읽기 중 오류가 발생했습니다: {str(e)}"
-                finally:  # try 블록에서 예외가 발생하지 않고 정상적으로 break 하면 파일이 열린 상태로 빠져나감.
-                    if csvfile:  # 따라서 파일이 열려있다면, 메모리 누수를 방지하기 위해
-                        csvfile.close()  # 파일 닫기 실행.
+                    continue
+                except Exception as e:
+                    print(f"CSV 가져오기 - {encod}: 기타 오류 - {str(e)}")
+                    if csvfile:
+                        csvfile.close()
+                    continue
+                finally:
+                    if csvfile:
+                        csvfile.close()
+
+            if successful_encoding is None:
+                return False, "모든 인코딩으로 파일을 읽을 수 없습니다. 파일이 손상되었거나 지원되지 않는 형식입니다."
+
+            print(f"CSV 가져오기 - 성공한 인코딩: {successful_encoding}")
+
+            # 성공한 인코딩으로 다시 파일 열기
+            with open(file_path, 'r', encoding=successful_encoding) as csvfile:
+                reader = csv.DictReader(csvfile)
+
+                for row_num, row in enumerate(reader, start=2):
+                    try:
+                        # DictReader는 딕셔너리 형태로 반환하므로 키로 접근
+                        # 필수 컬럼만 체크 (구간 길이, 타입은 선택사항)
+                        if not row.get('파일명') or not row.get('시작 시간') or not row.get('종료 시간'):
+                            error_count += 1
+                            error_details.append(
+                                f"행 {row_num}: 필수 컬럼 누락 (파일명, 시작 시간, 종료 시간)")
+                            continue
+
+                        # 문자열로 들어가 있기 때문에 strip()으로 공백 제거
+                        start_time_str = row['시작 시간'].strip()
+                        end_time_str = row['종료 시간'].strip()
+
+                        # 시간 문자열을 초 단위로 변환 (HH:MM:SS 형식)
+                        start_seconds = _parse_time_to_seconds(start_time_str)
+                        end_seconds = _parse_time_to_seconds(end_time_str)
+
+                        if start_seconds is None or end_seconds is None:
+                            error_count += 1
+                            error_details.append(
+                                f"행 {row_num}: 시간 형식 오류 ({start_time_str}, {end_time_str})")
+                            continue
+                        elif start_seconds >= end_seconds:
+                            error_count += 1
+                            error_details.append(
+                                f"행 {row_num}: 시작 시간이 종료 시간보다 크거나 같음")
+                            continue
+
+                        # 구간 데이터 생성, app.py의 내부 데이터 구조는 400-410 라인 확인. UI테이블에서의 헤더더와 다름.
+                        segment_data = {
+                            'file': row['파일명'].strip(),
+                            'start': start_seconds,
+                            'end': end_seconds,
+                            'duration': end_seconds - start_seconds,
+                            # row.get을 이용해서 기본값 ''으로 안전한 처리, cvs 파일의 컬럼이 누락되어도 오류 없이 처리하기 위함
+                            'opinion1': row.get('의견1', '').strip(),
+                            'opinion2': row.get('의견2', '').strip()
+                        }
+
+                        imported_segments.append(segment_data)
+
+                    except Exception as e:
+                        error_count += 1
+                        error_details.append(
+                            f"행 {row_num}: 데이터 처리 오류 - {str(e)}")
+                        print(f"CSV 행 {row_num} 처리 중 오류: {e}")
+                        continue
 
             if not imported_segments:
                 return False, "가져올 수 있는 구간 데이터가 없습니다."

@@ -179,7 +179,7 @@ class SegmentTable:
                         and index < len(self.app.saved_segments):
 
                     selected_segment = self.app.saved_segments[index]
-                    print(f"선택된 구간: {selected_segment}")
+                    # print(f"선택된 구간: {selected_segment}")
 
                     # 콜백 함수 호출
                     self.selection_callback(selected_segment)
@@ -371,30 +371,57 @@ class SegmentTable:
         """CSV에서 구간 데이터 가져오기"""
         try:
             print("CSV파일 가져오기 시작")
+
+            # 윈도우 환경에서 더 안정적인 파일 선택
             file_path = filedialog.askopenfilename(
                 title='CSV 파일 선택',
                 filetypes=[
                     ('CSV Files', '*.csv'),
-                    ('ALL Files', "*.*")
-                ]
+                    ('Text Files', '*.txt'),
+                    ('All Files', "*.*")
+                ],
+                initialdir=os.path.expanduser("~/Desktop")  # 기본 경로를 바탕화면으로 설정
             )
             print(f"선택된 CSV 파일 경로: {file_path}")
 
             if not file_path:
+                print("CSV 파일 선택이 취소됨")
                 return
+
+            # 파일 경로 정규화 (윈도우 경로 구분자 통일)
+            file_path = os.path.normpath(file_path)
+            print(f"정규화된 파일 경로: {file_path}")
+
+            # 파일 존재 및 접근 가능성 확인
+            if not os.path.exists(file_path):
+                messagebox.showerror("오류", f"파일을 찾을 수 없습니다:\n{file_path}")
+                return
+
+            if not os.access(file_path, os.R_OK):
+                messagebox.showerror(
+                    "오류", f"파일을 읽을 수 없습니다 (권한 없음):\n{file_path}")
+                return
+
+            print(f"현재 저장된 구간 수: {len(self.app.saved_segments)}")
 
             # App 클래스의 중앙화된 데이터 관리 메서드 호출
             success, message = self.app.import_segments_from_csv(file_path)
+
+            print(f"CSV 가져오기 결과: success={success}, message={message}")
+            print(f"가져오기 후 저장된 구간 수: {len(self.app.saved_segments)}")
 
             if success:
                 messagebox.showinfo("성공", message)
                 # 테이블 새로고침
                 self.refresh()
+                print("테이블 새로고침 완료")
             else:
                 messagebox.showerror("오류", message)
 
         except Exception as e:
-            messagebox.showerror("오류", f"CSV 가져오기 중 오류가 발생했습니다: {str(e)}")
+            error_msg = f"CSV 가져오기 중 오류가 발생했습니다: {str(e)}"
+            print(f"예외 발생: {error_msg}")
+            messagebox.showerror("오류", error_msg)
 
     # generate_csv_filename 메서드는 App 클래스로 이동됨 - 중앙화된 데이터 관리
 
